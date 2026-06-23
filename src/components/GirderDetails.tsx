@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
+import { HangerPanel } from './HangerPanel';
 
 interface GirderDetailsProps {
     group: GirderGroup | null;
@@ -370,6 +371,9 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                 </div>
                             </div>
                         </div>
+
+                        {/* SST HANGER SELECTOR */}
+                        <HangerPanel group={group} selectedCarried={selectedCarried} />
 
                         {/* CONNECTION STATE */}
                         <div className="mt-auto border-t border-[#1E293B] pt-4.5">
