@@ -62,7 +62,7 @@ export function GirderDetails({ group }: GirderDetailsProps) {
     return (
         <div className="flex-1 flex overflow-hidden bg-[#1E1F29]">
             {/* Middle Column: Carried Trusses List */}
-            <section className="w-80 border-r border-[#141414] flex flex-col bg-[#EDEDED] shrink-0">
+            <section className="w-[480px] border-r border-[#141414] flex flex-col bg-[#EDEDED] shrink-0">
                 <div className="p-3 border-b border-[#141414] flex justify-between items-center bg-[#D4D3D0] shrink-0">
                     <h2 className="text-[10px] uppercase font-bold tracking-widest text-[#141414]">Carried by {group.girder.label}</h2>
                     <span className="text-[10px] font-mono text-[#141414] font-bold">[{String(carried.length).padStart(2, '0')} Items]</span>
