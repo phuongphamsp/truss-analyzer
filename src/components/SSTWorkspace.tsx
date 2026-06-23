@@ -178,14 +178,14 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title="Connection Type"
           expanded={sections.connection}
           onToggle={() => toggle('connection')}
-          color="text-amber-400"
+          color="text-zinc-300"
         />
         {sections.connection && (
           <div className="p-3 flex items-center space-x-3">
             <div className={cn(
               'flex flex-col items-center px-3 py-2 rounded border text-[9px] min-w-[80px]',
               !isTruss
-                ? 'border-amber-500/60 bg-amber-950/30 text-amber-300'
+                ? 'border-cyan-500/50 bg-cyan-950/20 text-cyan-300'
                 : 'border-[#1E293B]/40 text-zinc-600'
             )}>
               <span className="font-bold">Joist</span>
@@ -194,12 +194,12 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             <div className={cn(
               'flex flex-col items-center px-3 py-2 rounded border text-[9px] min-w-[80px]',
               isTruss
-                ? 'border-amber-500/60 bg-amber-950/30 text-amber-300'
+                ? 'border-cyan-500/50 bg-cyan-950/20 text-cyan-300'
                 : 'border-[#1E293B]/40 text-zinc-600'
             )}>
               <span className="font-bold">Truss</span>
               <span className="text-[8px]">(Flush Bottom)</span>
-              {isTruss && <CheckCircle className="w-3 h-3 text-amber-400 mt-0.5" />}
+              {isTruss && <CheckCircle className="w-3 h-3 text-cyan-400 mt-0.5" />}
             </div>
             <div className="flex flex-col items-center px-3 py-2 rounded border border-[#1E293B]/40 text-zinc-600 text-[9px] min-w-[80px]">
               <span className="font-bold">Multi-Truss</span>
@@ -213,7 +213,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title="Job Settings"
           expanded={sections.job}
           onToggle={() => toggle('job')}
-          color="text-indigo-400"
+          color="text-zinc-300"
         />
         {sections.job && (
           <div className="py-1">
@@ -233,7 +233,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title={isTruss ? 'Girder (Carrying Member)' : 'Header (Carrying Member)'}
           expanded={sections.carrying}
           onToggle={() => toggle('carrying')}
-          color="text-emerald-400"
+          color="text-zinc-300"
         />
         {sections.carrying && (
           <div className="py-1">
@@ -255,7 +255,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title={isTruss ? 'Truss (Carried Member)' : 'Joist (Carried Member)'}
           expanded={sections.carried}
           onToggle={() => toggle('carried')}
-          color="text-amber-400"
+          color="text-zinc-300"
         />
         {sections.carried && (
           <div className="py-1">
@@ -277,7 +277,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title="Hanger Options"
           expanded={sections.hanger}
           onToggle={() => toggle('hanger')}
-          color="text-zinc-400"
+          color="text-zinc-300"
         />
         {sections.hanger && (
           <div className="py-1">
@@ -293,20 +293,20 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           title="Data Mapping Reference"
           expanded={sections.mapping}
           onToggle={() => toggle('mapping')}
-          color="text-cyan-400"
+          color="text-zinc-300"
         />
         {sections.mapping && (
           <div className="py-2 px-3 space-y-3 text-[9px] font-mono">
 
             {/* Overview */}
             <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-1.5">
-              <div className="text-[8px] uppercase text-cyan-400 font-bold tracking-wider">Overview</div>
+              <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Overview</div>
               <p className="text-zinc-400 leading-relaxed">
                 Data is extracted from <span className="text-zinc-200">IFC</span> (geometry, spatial layout) and <span className="text-zinc-200">TRE</span> (engineering properties, reactions) files,
                 then mapped to SST Hanger Selector API input parameters.
               </p>
               <p className="text-zinc-400 leading-relaxed">
-                Flow: <span className="text-emerald-400">IFC parse</span> &rarr; <span className="text-emerald-400">TRE parse</span> &rarr; <span className="text-amber-400">enrichCarriedTrusses()</span> &rarr; <span className="text-cyan-400">buildSSTPayload()</span> &rarr; <span className="text-indigo-400">SST API</span>
+                Flow: <span className="text-zinc-200">IFC parse</span> &rarr; <span className="text-zinc-200">TRE parse</span> &rarr; <span className="text-zinc-200">enrichCarriedTrusses()</span> &rarr; <span className="text-zinc-200">buildSSTPayload()</span> &rarr; <span className="text-zinc-200">SST API</span>
               </p>
             </div>
 
@@ -447,8 +447,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             </div>
 
             {/* Data gaps */}
-            <div className="bg-amber-950/20 border border-amber-500/20 rounded p-2.5 space-y-1">
-              <div className="text-[8px] uppercase text-amber-400 font-bold tracking-wider">Known Data Gaps</div>
+            <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-1">
+              <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Known Data Gaps</div>
               <ul className="text-zinc-400 leading-relaxed space-y-0.5 list-disc list-inside">
                 <li><span className="text-zinc-300">Ply count</span> — not parsed from TRE; defaults to 1</li>
                 <li><span className="text-zinc-300">Skew angle</span> — bearing orientation not in TRE/IFC; defaults to 0°</li>
@@ -495,11 +495,11 @@ function MappingRow({ section, param, source, logic, sourceTag }: {
   }
 
   const sourceColor = sourceTag === 'ifc'
-    ? 'text-emerald-400'
+    ? 'text-zinc-300'
     : sourceTag === 'tre'
-      ? 'text-amber-400'
+      ? 'text-zinc-300'
       : sourceTag === 'both'
-        ? 'text-cyan-400'
+        ? 'text-zinc-300'
         : 'text-zinc-500';
 
   return (
@@ -565,7 +565,7 @@ function OutputPanel({
         <div className="flex items-center space-x-2">
           <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Output</span>
           {loading && (
-            <span className="text-[9px] font-mono text-amber-400 animate-pulse">Searching...</span>
+            <span className="text-[9px] font-mono text-zinc-400 animate-pulse">Searching...</span>
           )}
           {result?.success && (
             <span className="text-[9px] font-mono text-emerald-400">
@@ -613,7 +613,7 @@ function OutputPanel({
         {/* Loading */}
         {loading && (
           <div className="text-center py-12">
-            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-3"></div>
+            <div className="inline-block w-6 h-6 border-2 border-zinc-600 border-t-zinc-400 rounded-full animate-spin mb-3"></div>
             <div className="text-[11px] font-mono text-zinc-500">Querying SST Hanger Selector API...</div>
           </div>
         )}

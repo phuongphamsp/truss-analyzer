@@ -126,8 +126,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                                 className={cn(
                                                     "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider transition-colors",
                                                     isSelected
-                                                        ? "bg-amber-500 text-white hover:bg-amber-400"
-                                                        : "bg-amber-600/20 text-amber-700 hover:bg-amber-600/40"
+                                                        ? "bg-cyan-600 text-white hover:bg-cyan-500"
+                                                        : "bg-cyan-600/15 text-cyan-700 hover:bg-cyan-600/30"
                                                 )}
                                                 title={`Find hangers for ${c.instance.label}`}
                                             >
@@ -162,8 +162,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                     <span>Back to Workspace</span>
                                 </button>
                                 <span className="text-zinc-600 mx-2">|</span>
-                                <Search className="w-3.5 h-3.5 text-amber-400" />
-                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-300">
+                                <Search className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
                                     SST Hanger Selector — {selectedCarried?.instance.label}
                                 </span>
                             </>
