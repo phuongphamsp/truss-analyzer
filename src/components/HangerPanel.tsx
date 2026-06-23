@@ -230,7 +230,7 @@ function BatchResultsView({ results }: BatchResultsViewProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Payload Preview — shows mapped parameters
+// Payload Preview — mirrors SST Hanger Selector's 5-section INPUT layout
 // ---------------------------------------------------------------------------
 
 /** Decode SST enum integers to readable labels */
@@ -239,110 +239,257 @@ const MATERIAL_LABELS: Record<number, string> = {
   5: 'Truss', 6: 'I-Joist', 7: 'Floor Truss', 10: 'Concrete', 11: 'Steel',
 };
 const STYLE_LABELS: Record<number, string> = {
-  0: 'All', 1: 'Face Mount', 2: 'Top Flange', 3: 'Concealed',
+  0: 'All Types', 1: 'Face Mount', 2: 'Top Flange', 3: 'Concealed Flange',
+};
+const FASTENER_LABELS: Record<number, string> = {
+  0: 'All', 1: 'Nails', 2: 'Bolts', 3: 'Screws',
 };
 const ANSITPI_LABELS: Record<number, string> = {
-  0: 'Off', 3: 'End Connection', 6: 'Interior Connection',
+  0: 'Off', 3: 'On (End Connection)', 6: 'On (Interior Connection)',
 };
 const CODE_LABELS: Record<number, string> = {
   0: 'None', 10: 'IBC 2018', 20: 'IRC 2018', 30: 'IBC 2021', 40: 'IRC 2021',
 };
 const DL_DUR_LABELS: Record<number, string> = {
-  90: 'Dead', 100: 'Floor', 115: 'Snow', 125: 'Roof', 160: 'Wind/Quake',
+  90: 'Dead (90)', 100: 'Floor (100)', 115: 'Snow (115)', 125: 'Roof (125)', 160: 'Quake/Wind (160)',
+};
+const UL_DUR_LABELS: Record<number, string> = {
+  100: 'Normal (100)', 160: 'Quake/Wind (160)',
 };
 const SKEW_LABELS: Record<number, string> = { 0: 'None', 1: 'Left', 2: 'Right' };
 const SLOPE_LABELS: Record<number, string> = { 0: 'None', 1: 'Up', 2: 'Down' };
 
-interface PayloadPreviewProps {
-  payload: SSTPayload;
-  carriedLabel: string;
+/** Convert actual inches to nominal label, e.g. 1.5 -> '2x (1 1/2")' */
+function widthToNominal(w: number): string {
+  if (w <= 1.5) return '2x (1 1/2")';
+  if (w <= 2.5) return '3x (2 1/2")';
+  if (w <= 3.5) return '4x (3 1/2")';
+  if (w <= 5.5) return '6x (5 1/2")';
+  return `${w}"`;
 }
 
-function PayloadPreview({ payload, carriedLabel }: PayloadPreviewProps) {
-  const [expanded, setExpanded] = useState(true);
-  const cm = payload.carryingMember;
-  const cd = payload.carriedMembers[0];
+function depthToNominal(d: number): string {
+  if (d <= 3.5) return '4 (3 1/2")';
+  if (d <= 4.5) return '5 (4 1/2")';
+  if (d <= 5.5) return '6 (5 1/2")';
+  if (d <= 7.25) return '8 (7 1/4")';
+  if (d <= 9.25) return '10 (9 1/4")';
+  if (d <= 11.25) return '12 (11 1/4")';
+  return `${d}"`;
+}
 
+/** Collapsible section header matching SST site style */
+function SectionHeader({
+  title,
+  expanded,
+  onToggle,
+  color = 'text-zinc-300',
+}: {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  color?: string;
+}) {
   return (
-    <div className="border border-[#1E293B]/60 bg-[#0A0B10] rounded p-2 space-y-2">
-      <div
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span className="text-[8px] uppercase text-zinc-400 tracking-wider font-bold">
-          Mapped Parameters — {carriedLabel}
-        </span>
-        <span className="text-[8px] font-mono text-zinc-500">
-          {expanded ? '[-]' : '[+]'}
-        </span>
-      </div>
-
-      {expanded && (
-        <div className="space-y-2 text-[10px] font-mono">
-          {/* Job Settings */}
-          <div>
-            <div className="text-[8px] uppercase text-indigo-400 font-bold mb-1 tracking-wider">
-              Job Settings
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
-              <Row label="Style" value={STYLE_LABELS[payload.style] ?? String(payload.style)} />
-              <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} />
-              <Row label="ANSI/TPI" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} />
-              <Row label="Flush Option" value={payload.flushOption} />
-              <Row label="DL Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} />
-              <Row label="UL Duration" value={DL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} />
-            </div>
-          </div>
-
-          {/* Carrying Member (Girder) */}
-          <div>
-            <div className="text-[8px] uppercase text-emerald-400 font-bold mb-1 tracking-wider">
-              Carrying Member (Girder)
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
-              <Row label="Material" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} />
-              <Row label="Width" value={`${cm.width}"`} />
-              <Row label="Depth" value={`${cm.depth}"`} />
-              <Row label="Ply" value={String(cm.ply)} />
-              <Row label="King Height" value={`${cm.kingHeight}"`} />
-              <Row label="Top Chord" value={cm.topChord === 0 ? 'N/A' : String(cm.topChord)} />
-            </div>
-          </div>
-
-          {/* Carried Member (Truss) */}
-          <div>
-            <div className="text-[8px] uppercase text-amber-400 font-bold mb-1 tracking-wider">
-              Carried Member (Truss)
-            </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
-              <Row label="Material" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} />
-              <Row label="Width" value={`${cd.width}"`} />
-              <Row label="Depth (Heel)" value={`${cd.depth}"`} />
-              <Row label="Ply" value={String(cd.ply)} />
-              <Row label="Download" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" />
-              <Row label="Uplift" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" />
-              <Row label="Skew" value={`${cd.angle.skewAngle}° (${SKEW_LABELS[cd.angle.skewType] ?? '?'})`} />
-              <Row label="Slope" value={`${cd.angle.slopeAngle}° (${SLOPE_LABELS[cd.angle.slopeType] ?? '?'})`} />
-            </div>
-          </div>
-        </div>
-      )}
+    <div
+      className="flex items-center justify-between cursor-pointer py-1.5 border-b border-[#1E293B]/60"
+      onClick={onToggle}
+    >
+      <span className={cn('text-[9px] uppercase font-bold tracking-wider', color)}>
+        {title}
+      </span>
+      <span className="text-[9px] font-mono text-zinc-500">
+        {expanded ? '\u25BC' : '\u25B6'}
+      </span>
     </div>
   );
 }
 
-/** Single key-value row for PayloadPreview */
-function Row({ label, value, highlight }: { label: string; value: string; highlight?: 'down' | 'up' }) {
+/** Single key-value row */
+function Row({ label, value, highlight, source }: {
+  label: string;
+  value: string;
+  highlight?: 'down' | 'up';
+  source?: string;
+}) {
   const valueColor = highlight === 'down'
     ? 'text-[#FFB74D]'
     : highlight === 'up'
       ? 'text-sky-400'
       : 'text-zinc-200';
   return (
-    <>
+    <div className="flex justify-between items-start py-0.5">
       <span className="text-zinc-500 text-[9px]">{label}</span>
-      <span className={cn('text-right font-bold text-[9px]', valueColor)}>{value}</span>
-    </>
+      <div className="text-right">
+        <span className={cn('font-bold text-[9px]', valueColor)}>{value}</span>
+        {source && (
+          <div className="text-[7px] text-zinc-600 leading-tight">{source}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface PayloadPreviewProps {
+  payload: SSTPayload;
+  carriedLabel: string;
+  girderLabel: string;
+}
+
+function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewProps) {
+  const [sections, setSections] = useState({
+    connection: true,
+    job: false,
+    carrying: true,
+    carried: true,
+    hanger: false,
+  });
+
+  const toggle = (key: keyof typeof sections) =>
+    setSections((s) => ({ ...s, [key]: !s[key] }));
+
+  const cm = payload.carryingMember;
+  const cd = payload.carriedMembers[0];
+  const isTruss = payload.flushOption === 'BOTTOM';
+
+  return (
+    <div className="border border-[#1E293B]/60 bg-[#0A0B10] rounded overflow-hidden">
+      {/* Title bar */}
+      <div className="bg-[#1A1B26] px-2.5 py-1.5 border-b border-[#1E293B]/60 flex items-center justify-between">
+        <span className="text-[8px] uppercase text-zinc-400 tracking-wider font-bold">
+          SST Input Parameters
+        </span>
+        <span className="text-[8px] font-mono text-zinc-500">
+          {carriedLabel} on {girderLabel}
+        </span>
+      </div>
+
+      <div className="px-2.5 py-1 space-y-0.5 font-mono">
+
+        {/* ── 1. CONNECTION TYPE ── */}
+        <SectionHeader
+          title="Connection Type"
+          expanded={sections.connection}
+          onToggle={() => toggle('connection')}
+          color="text-amber-400"
+        />
+        {sections.connection && (
+          <div className="py-1.5 pl-1">
+            <div className="flex items-center space-x-3">
+              {/* Joist option */}
+              <div className={cn(
+                'flex flex-col items-center px-2 py-1.5 rounded border text-[8px]',
+                !isTruss
+                  ? 'border-amber-500/60 bg-amber-950/30 text-amber-300'
+                  : 'border-[#1E293B]/40 text-zinc-600'
+              )}>
+                <span className="font-bold">Joist</span>
+                <span className="text-[7px]">(Flush Top)</span>
+              </div>
+              {/* Truss option */}
+              <div className={cn(
+                'flex flex-col items-center px-2 py-1.5 rounded border text-[8px]',
+                isTruss
+                  ? 'border-amber-500/60 bg-amber-950/30 text-amber-300'
+                  : 'border-[#1E293B]/40 text-zinc-600'
+              )}>
+                <span className="font-bold">Truss</span>
+                <span className="text-[7px]">(Flush Bottom)</span>
+              </div>
+              {/* Multi-Truss option */}
+              <div className="flex flex-col items-center px-2 py-1.5 rounded border border-[#1E293B]/40 text-zinc-600 text-[8px]">
+                <span className="font-bold">Multi-Truss</span>
+                <span className="text-[7px]">(Flush Bottom)</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── 2. JOB SETTINGS ── */}
+        <SectionHeader
+          title="Job Settings"
+          expanded={sections.job}
+          onToggle={() => toggle('job')}
+          color="text-indigo-400"
+        />
+        {sections.job && (
+          <div className="py-1.5 pl-1 space-y-0.5">
+            <Row label="Hanger Type" value={STYLE_LABELS[payload.style] ?? String(payload.style)} source="default: All Types" />
+            <Row label="Fastener Type" value={FASTENER_LABELS[payload.fastenerType] ?? String(payload.fastenerType)} source="default: All" />
+            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} source="default: IRC 2018" />
+            <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} source="mapped from truss type" />
+            <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} source="default: Wind/Quake" />
+            {isTruss && (
+              <Row label="ANSI/TPI" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
+            )}
+          </div>
+        )}
+
+        {/* ── 3. CARRYING MEMBER ── */}
+        <SectionHeader
+          title={isTruss ? 'Girder (Carrying Member)' : 'Header (Carrying Member)'}
+          expanded={sections.carrying}
+          onToggle={() => toggle('carrying')}
+          color="text-emerald-400"
+        />
+        {sections.carrying && (
+          <div className="py-1.5 pl-1 space-y-0.5">
+            <Row label="Material" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} source="girder = Truss type" />
+            <Row label="Width" value={widthToNominal(cm.width)} source={`actual: ${cm.width}"`} />
+            <Row label="Depth" value={depthToNominal(cm.depth)} source={`actual: ${cm.depth}"`} />
+            <Row label="Ply" value={String(cm.ply)} source="default: 1" />
+            {isTruss && (
+              <>
+                <Row label="King Width" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source="not available in TRE" />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} source="from girder heel height" />
+              </>
+            )}
+            {!isTruss && (
+              <Row label="Top Chord" value={cm.topChord === 1 ? 'Single' : cm.topChord === 2 ? 'Double' : 'N/A'} />
+            )}
+          </div>
+        )}
+
+        {/* ── 4. CARRIED MEMBER ── */}
+        <SectionHeader
+          title={isTruss ? 'Truss (Carried Member)' : 'Joist (Carried Member)'}
+          expanded={sections.carried}
+          onToggle={() => toggle('carried')}
+          color="text-amber-400"
+        />
+        {sections.carried && (
+          <div className="py-1.5 pl-1 space-y-0.5">
+            <Row label="Material" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} source="carried = Truss type" />
+            <Row label="Width" value={widthToNominal(cd.width)} source={`actual: ${cd.width}"`} />
+            {isTruss ? (
+              <Row label="Heel Height" value={`${cd.depth}"`} source="from TRE heel at bearing side" />
+            ) : (
+              <Row label="Depth" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
+            )}
+            <Row label="Ply" value={String(cd.ply)} source="default: 1" />
+            <Row label="Download Load" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
+            <Row label="Uplift Load" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
+          </div>
+        )}
+
+        {/* ── 5. HANGER OPTIONS ── */}
+        <SectionHeader
+          title="Hanger Options"
+          expanded={sections.hanger}
+          onToggle={() => toggle('hanger')}
+          color="text-zinc-400"
+        />
+        {sections.hanger && (
+          <div className="py-1.5 pl-1 space-y-0.5">
+            <Row label="Skew Angle" value={`${cd.angle.skewAngle}\u00B0`} source={cd.angle.skewType === 0 ? 'no skew data in TRE' : SKEW_LABELS[cd.angle.skewType]} />
+            <Row label="Skew Direction" value={SKEW_LABELS[cd.angle.skewType] ?? 'None'} />
+            <Row label="Slope Angle" value={`${cd.angle.slopeAngle}\u00B0`} source={cd.angle.slopeType === 0 ? 'bottom chord is level' : SLOPE_LABELS[cd.angle.slopeType]} />
+            <Row label="Slope Direction" value={SLOPE_LABELS[cd.angle.slopeType] ?? 'None'} />
+          </div>
+        )}
+
+      </div>
+    </div>
   );
 }
 
@@ -486,11 +633,12 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
         </button>
       </div>
 
-      {/* Payload Preview */}
+      {/* Payload Preview — mirrors SST site's 5-section INPUT layout */}
       {selectedCarried && (
         <PayloadPreview
           payload={buildSSTPayload(group, selectedCarried)}
           carriedLabel={selectedCarried.instance.label}
+          girderLabel={group.girder.label}
         />
       )}
 
