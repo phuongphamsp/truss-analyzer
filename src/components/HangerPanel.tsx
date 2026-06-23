@@ -27,7 +27,11 @@ import { cn } from '../lib/utils';
 // Token Input
 // ---------------------------------------------------------------------------
 
-function TokenInput() {
+interface TokenInputProps {
+  onTokenChange: (hasToken: boolean) => void;
+}
+
+function TokenInput({ onTokenChange }: TokenInputProps) {
   const [token, setToken] = useState(getSSTToken() ?? '');
   const [saved, setSaved] = useState(hasSSTToken());
   const [expanded, setExpanded] = useState(!hasSSTToken());
@@ -37,6 +41,7 @@ function TokenInput() {
       setSSTToken(token.trim());
       setSaved(true);
       setExpanded(false);
+      onTokenChange(true);
     }
   };
 
@@ -45,6 +50,7 @@ function TokenInput() {
     setToken('');
     setSaved(false);
     setExpanded(true);
+    onTokenChange(false);
   };
 
   return (
@@ -235,6 +241,7 @@ interface HangerPanelProps {
 type ViewMode = 'idle' | 'single' | 'batch';
 
 export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
+  const [tokenReady, setTokenReady] = useState(hasSSTToken());
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('idle');
   const [singleResult, setSingleResult] = useState<SSTAPIResponse | null>(null);
@@ -255,7 +262,7 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
   }, [selectedCarried?.instance.id]);
 
   const handleFindHangers = useCallback(async () => {
-    if (!selectedCarried || !hasSSTToken()) return;
+    if (!selectedCarried || !tokenReady) return;
 
     setLoading(true);
     setError(null);
@@ -280,7 +287,7 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
   }, [group, selectedCarried]);
 
   const handleFindAllHangers = useCallback(async () => {
-    if (!hasSSTToken()) return;
+    if (!tokenReady) return;
 
     setLoading(true);
     setError(null);
@@ -330,16 +337,16 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
       </div>
 
       {/* Token */}
-      <TokenInput />
+      <TokenInput onTokenChange={setTokenReady} />
 
       {/* Action Buttons */}
       <div className="flex space-x-1.5">
         <button
           onClick={handleFindHangers}
-          disabled={loading || !hasSSTToken() || !selectedCarried}
+          disabled={loading || !tokenReady || !selectedCarried}
           className={cn(
             'flex-1 px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors',
-            loading || !hasSSTToken() || !selectedCarried
+            loading || !tokenReady || !selectedCarried
               ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
               : 'bg-amber-600 text-white hover:bg-amber-500'
           )}
@@ -350,10 +357,10 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
         </button>
         <button
           onClick={handleFindAllHangers}
-          disabled={loading || !hasSSTToken()}
+          disabled={loading || !tokenReady}
           className={cn(
             'px-2 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors',
-            loading || !hasSSTToken()
+            loading || !tokenReady
               ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
               : 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600'
           )}
