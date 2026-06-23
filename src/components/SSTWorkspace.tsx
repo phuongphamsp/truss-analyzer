@@ -680,7 +680,7 @@ interface SSTWorkspaceProps {
 
 export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
   const payload = buildSSTPayload(group, selectedCarried);
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [viewMode, setViewMode] = useState<ViewMode>('output-only');
 
   const showInput = viewMode === 'split' || viewMode === 'input-only';
   const showOutput = viewMode === 'split' || viewMode === 'output-only';
