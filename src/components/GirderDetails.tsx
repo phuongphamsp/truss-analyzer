@@ -9,11 +9,13 @@ import {
   TrendingUp, 
   Activity, 
   Hash, 
-  AlertCircle 
+  AlertCircle,
+  ArrowLeft,
+  Search
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
-import { HangerPanel } from './HangerPanel';
+import { SSTWorkspace } from './SSTWorkspace';
 
 interface GirderDetailsProps {
     group: GirderGroup | null;
@@ -21,6 +23,7 @@ interface GirderDetailsProps {
 
 export function GirderDetails({ group }: GirderDetailsProps) {
     const [selectedCarriedId, setSelectedCarriedId] = useState<string | null>(null);
+    const [sstMode, setSstMode] = useState(false);
 
     if (!group) {
         return (
@@ -72,7 +75,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                 <th className="p-2 text-right">Offset X</th>
                                 <th className="p-2 text-right">Rxn ↓</th>
                                 <th className="p-2 text-right">Uplift ↑</th>
-                                <th className="p-3 text-right">DOL</th>
+                                <th className="p-2 text-right">DOL</th>
+                                <th className="p-2 text-center">SST</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -109,15 +113,33 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <td className="p-2 text-right" style={{ color: isSelected ? '#4FC3F7' : '#0369A1' }}>
                                             {rxnUp.toFixed(0)} lb
                                         </td>
-                                        <td className="p-3 text-right" style={{ color: isSelected ? '#81C784' : '#15803D' }}>
+                                        <td className="p-2 text-right" style={{ color: isSelected ? '#81C784' : '#15803D' }}>
                                             {dolVal !== null ? dolVal.toFixed(2) : '—'}
+                                        </td>
+                                        <td className="p-1 text-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCarriedId(c.instance.id);
+                                                    setSstMode(true);
+                                                }}
+                                                className={cn(
+                                                    "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider transition-colors",
+                                                    isSelected
+                                                        ? "bg-amber-500 text-white hover:bg-amber-400"
+                                                        : "bg-amber-600/20 text-amber-700 hover:bg-amber-600/40"
+                                                )}
+                                                title={`Find hangers for ${c.instance.label}`}
+                                            >
+                                                <Search className="w-3 h-3 inline" />
+                                            </button>
                                         </td>
                                     </tr>
                                 )
                             })}
                             {carried.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="p-4 text-center opacity-50 text-[10px]">No carried trusses.</td>
+                                    <td colSpan={6} className="p-4 text-center opacity-50 text-[10px]">No carried trusses.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -130,19 +152,44 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                 {/* Header Strip */}
                 <div className="h-10 bg-[#12131C] border-b border-[#1E293B] flex items-center justify-between px-4 shrink-0">
                     <div className="flex items-center space-x-2">
-                        <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                        <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
-                            Truss Structural Analyzer Workspace
-                        </span>
+                        {sstMode ? (
+                            <>
+                                <button
+                                    onClick={() => setSstMode(false)}
+                                    className="flex items-center space-x-1.5 text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 hover:text-zinc-200 transition-colors"
+                                >
+                                    <ArrowLeft className="w-3.5 h-3.5" />
+                                    <span>Back to Workspace</span>
+                                </button>
+                                <span className="text-zinc-600 mx-2">|</span>
+                                <Search className="w-3.5 h-3.5 text-amber-400" />
+                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-amber-300">
+                                    SST Hanger Selector — {selectedCarried?.instance.label}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
+                                    Truss Structural Analyzer Workspace
+                                </span>
+                            </>
+                        )}
                     </div>
                     <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-[9px] font-mono text-emerald-400 uppercase font-bold">AISC solver 2.4</span>
-                        </div>
+                        {!sstMode && (
+                            <div className="flex items-center space-x-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="text-[9px] font-mono text-emerald-400 uppercase font-bold">AISC solver 2.4</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
+                {sstMode && selectedCarried ? (
+                    <SSTWorkspace group={group} selectedCarried={selectedCarried} />
+                ) : (
+                <>
                 {/* Split workspace area */}
                 <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
                     {/* Left Panel: The 2 Diagrams Stacked */}
@@ -372,9 +419,6 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                             </div>
                         </div>
 
-                        {/* SST HANGER SELECTOR */}
-                        <HangerPanel group={group} selectedCarried={selectedCarried} />
-
                         {/* CONNECTION STATE */}
                         <div className="mt-auto border-t border-[#1E293B] pt-4.5">
                             <div className="flex flex-col space-y-1.5 bg-[#081C15] border border-emerald-500/20 rounded p-3">
@@ -394,6 +438,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                         </div>
                     </div>
                 </div>
+                </>
+                )}
             </section>
         </div>
     );
