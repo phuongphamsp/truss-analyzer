@@ -19,7 +19,7 @@ import {
   submitToSST,
 } from '../lib/sst-api';
 import { cn } from '../lib/utils';
-import { Search, Key, AlertCircle, CheckCircle } from 'lucide-react';
+import { Search, Key, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Enum label maps
@@ -126,10 +126,14 @@ function Row({ label, value, highlight, source }: {
 // INPUT Panel (left column)
 // ---------------------------------------------------------------------------
 
-function InputPanel({ payload, girderLabel, carriedLabel }: {
+type ViewMode = 'split' | 'input-only' | 'output-only';
+
+function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange }: {
   payload: SSTPayload;
   girderLabel: string;
   carriedLabel: string;
+  viewMode: ViewMode;
+  onViewChange: (mode: ViewMode) => void;
 }) {
   const [sections, setSections] = useState({
     connection: true,
@@ -153,7 +157,21 @@ function InputPanel({ payload, girderLabel, carriedLabel }: {
       <div className="px-3 py-2 bg-[#12131C] border-b border-[#1E293B] shrink-0">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Input</span>
-          <span className="text-[9px] font-mono text-zinc-500">{carriedLabel} on {girderLabel}</span>
+          <div className="flex items-center space-x-2">
+            <span className="text-[9px] font-mono text-zinc-500">{carriedLabel} on {girderLabel}</span>
+            <button
+              onClick={() => onViewChange(viewMode === 'input-only' ? 'split' : 'input-only')}
+              className={cn(
+                'p-1 rounded transition-colors',
+                viewMode === 'input-only'
+                  ? 'bg-cyan-600/30 text-cyan-400'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#1E293B]/50'
+              )}
+              title={viewMode === 'input-only' ? 'Show split view' : 'Expand Input'}
+            >
+              {viewMode === 'input-only' ? <Columns className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -503,9 +521,13 @@ function MappingRow({ section, param, source, logic, sourceTag }: {
 function OutputPanel({
   payload,
   carriedLabel,
+  viewMode,
+  onViewChange,
 }: {
   payload: SSTPayload;
   carriedLabel: string;
+  viewMode: ViewMode;
+  onViewChange: (mode: ViewMode) => void;
 }) {
   const [tokenReady, setTokenReady] = useState(hasSSTToken());
   const [tokenInput, setTokenInput] = useState(getSSTToken() ?? '');
@@ -552,12 +574,26 @@ function OutputPanel({
     <div className="flex flex-col h-full">
       {/* OUTPUT header */}
       <div className="px-4 py-2 bg-[#12131C] border-b border-[#1E293B] shrink-0 flex items-center justify-between">
-        <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Output</span>
-        {result?.success && (
-          <span className="text-[9px] font-mono text-emerald-400">
-            {result.hangers.length} hangers found
-          </span>
-        )}
+        <div className="flex items-center space-x-2">
+          <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Output</span>
+          {result?.success && (
+            <span className="text-[9px] font-mono text-emerald-400">
+              {result.hangers.length} hangers found
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => onViewChange(viewMode === 'output-only' ? 'split' : 'output-only')}
+          className={cn(
+            'p-1 rounded transition-colors',
+            viewMode === 'output-only'
+              ? 'bg-cyan-600/30 text-cyan-400'
+              : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#1E293B]/50'
+          )}
+          title={viewMode === 'output-only' ? 'Show split view' : 'Expand Output'}
+        >
+          {viewMode === 'output-only' ? <Columns className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -700,25 +736,67 @@ interface SSTWorkspaceProps {
 
 export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
   const payload = buildSSTPayload(group, selectedCarried);
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+
+  const showInput = viewMode === 'split' || viewMode === 'input-only';
+  const showOutput = viewMode === 'split' || viewMode === 'output-only';
 
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left: INPUT */}
-      <div className="w-[380px] border-r border-[#1E293B] bg-[#0F111A] flex flex-col shrink-0 overflow-hidden">
-        <InputPanel
-          payload={payload}
-          girderLabel={group.girder.label}
-          carriedLabel={selectedCarried.instance.label}
-        />
-      </div>
+      {showInput && (
+        <div className={cn(
+          'border-r border-[#1E293B] bg-[#0F111A] flex flex-col overflow-hidden transition-all',
+          viewMode === 'input-only' ? 'flex-1' : 'w-[380px] shrink-0'
+        )}>
+          <InputPanel
+            payload={payload}
+            girderLabel={group.girder.label}
+            carriedLabel={selectedCarried.instance.label}
+            viewMode={viewMode}
+            onViewChange={setViewMode}
+          />
+        </div>
+      )}
+
+      {/* Collapsed INPUT tab */}
+      {!showInput && (
+        <div
+          className="w-8 bg-[#12131C] border-r border-[#1E293B] flex flex-col items-center pt-3 cursor-pointer hover:bg-[#1A1B26] transition-colors shrink-0"
+          onClick={() => setViewMode('split')}
+          title="Show Input panel"
+        >
+          <ChevronRight className="w-4 h-4 text-zinc-500 mb-2" />
+          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest [writing-mode:vertical-lr]">Input</span>
+        </div>
+      )}
 
       {/* Right: OUTPUT */}
-      <div className="flex-1 bg-[#0C0D14] flex flex-col overflow-hidden">
-        <OutputPanel
-          payload={payload}
-          carriedLabel={selectedCarried.instance.label}
-        />
-      </div>
+      {showOutput && (
+        <div className={cn(
+          'bg-[#0C0D14] flex flex-col overflow-hidden',
+          viewMode === 'output-only' ? 'flex-1' : 'flex-1'
+        )}>
+          <OutputPanel
+            payload={payload}
+            carriedLabel={selectedCarried.instance.label}
+            viewMode={viewMode}
+            onViewChange={setViewMode}
+          />
+        </div>
+      )}
+
+      {/* Collapsed OUTPUT tab */}
+      {!showOutput && (
+        <div
+          className="w-8 bg-[#12131C] border-l border-[#1E293B] flex flex-col items-center pt-3 cursor-pointer hover:bg-[#1A1B26] transition-colors shrink-0"
+          onClick={() => setViewMode('split')}
+          title="Show Output panel"
+        >
+          <ChevronLeft className="w-4 h-4 text-zinc-500 mb-2" />
+          <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest [writing-mode:vertical-lr]">Output</span>
+        </div>
+      )}
     </div>
   );
 }
