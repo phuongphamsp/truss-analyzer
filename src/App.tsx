@@ -83,7 +83,7 @@ export default function App() {
 
         <main className="flex-1 flex overflow-hidden">
             {/* Left Sidebar */}
-            <aside className="w-80 border-r border-[#141414] shrink-0 flex flex-col bg-[#EDEDED]">
+            <aside className="w-56 border-r border-[#141414] shrink-0 flex flex-col bg-[#EDEDED]">
                 <div className="border-b border-[#141414] bg-[#F2F2F2]">
                     <FileUpload onAnalyze={handleAnalyze} onLog={handleLog} />
                 </div>
