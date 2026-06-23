@@ -87,54 +87,19 @@ export default function App() {
                 <div className="border-b border-[#141414] bg-[#F2F2F2]">
                     <FileUpload onAnalyze={handleAnalyze} onLog={handleLog} />
                 </div>
-                <div className="flex-1 flex flex-col min-h-0 border-b border-[#141414]">
+                <div className="flex-1 flex flex-col min-h-0">
                     <GirderList 
                         girders={girders} 
                         selectedId={selectedGirderId}
                         onSelect={setSelectedGirderId} 
                     />
                 </div>
-                <div className="h-56 shrink-0 flex flex-col">
-                    <LogPanel logs={logs} />
-                </div>
             </aside>
 
             {/* Main Content Area */}
             <section className="flex-1 flex flex-col min-w-0 bg-[#DEDCD7]">
-                {/* Tabs Header */}
-                <div className="h-10 border-b border-[#141414] bg-[#EDEDED] flex items-center px-4 space-x-2 shrink-0">
-                    <button
-                        onClick={() => setActiveTab('analyzer')}
-                        className={cn(
-                            "px-4 h-full flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors",
-                            activeTab === 'analyzer' 
-                                ? "border-[#141414] text-[#141414]" 
-                                : "border-transparent text-zinc-500 hover:text-[#141414]"
-                        )}
-                    >
-                        <Cpu className="w-3.5 h-3.5" />
-                        <span>Truss Analyzer</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('export')}
-                        className={cn(
-                            "px-4 h-full flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest border-b-2 transition-colors",
-                            activeTab === 'export' 
-                                ? "border-[#141414] text-[#141414]" 
-                                : "border-transparent text-zinc-500 hover:text-[#141414]"
-                        )}
-                    >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>JSON Export</span>
-                    </button>
-                </div>
-                
                 <div className="flex-1 flex overflow-hidden">
-                    {activeTab === 'analyzer' ? (
-                        <GirderDetails group={selectedGirder} />
-                    ) : (
-                        <ExportTab girders={girders} onLog={handleLog} />
-                    )}
+                    <GirderDetails group={selectedGirder} />
                 </div>
             </section>
         </main>
