@@ -7,19 +7,16 @@
  *   Right column = OUTPUT (token, action button, results table)
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
 import { buildSSTPayload } from '../lib/sst-mapper';
 import {
-  getSSTToken,
-  setSSTToken,
-  clearSSTToken,
   hasSSTToken,
   submitToSST,
 } from '../lib/sst-api';
 import { cn } from '../lib/utils';
-import { Search, Key, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Enum label maps
@@ -529,30 +526,16 @@ function OutputPanel({
   viewMode: ViewMode;
   onViewChange: (mode: ViewMode) => void;
 }) {
-  const [tokenReady, setTokenReady] = useState(hasSSTToken());
-  const [tokenInput, setTokenInput] = useState(getSSTToken() ?? '');
-  const [tokenExpanded, setTokenExpanded] = useState(!hasSSTToken());
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SSTAPIResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSaveToken = () => {
-    if (tokenInput.trim()) {
-      setSSTToken(tokenInput.trim());
-      setTokenReady(true);
-      setTokenExpanded(false);
+  // Auto-submit on mount (token already set in sidebar)
+  const runQuery = useCallback(async () => {
+    if (!hasSSTToken()) {
+      setError('No SST token set. Please set the Bearer token in the left sidebar first.');
+      return;
     }
-  };
-
-  const handleClearToken = () => {
-    clearSSTToken();
-    setTokenInput('');
-    setTokenReady(false);
-    setTokenExpanded(true);
-  };
-
-  const handleSubmit = useCallback(async () => {
-    if (!tokenReady) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -568,7 +551,12 @@ function OutputPanel({
     } finally {
       setLoading(false);
     }
-  }, [payload, carriedLabel, tokenReady]);
+  }, [payload, carriedLabel]);
+
+  // Auto-run on mount
+  useEffect(() => {
+    runQuery();
+  }, [runQuery]);
 
   return (
     <div className="flex flex-col h-full">
@@ -576,95 +564,57 @@ function OutputPanel({
       <div className="px-4 py-2 bg-[#12131C] border-b border-[#1E293B] shrink-0 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Output</span>
+          {loading && (
+            <span className="text-[9px] font-mono text-amber-400 animate-pulse">Searching...</span>
+          )}
           {result?.success && (
             <span className="text-[9px] font-mono text-emerald-400">
               {result.hangers.length} hangers found
             </span>
           )}
         </div>
-        <button
-          onClick={() => onViewChange(viewMode === 'output-only' ? 'split' : 'output-only')}
-          className={cn(
-            'p-1 rounded transition-colors',
-            viewMode === 'output-only'
-              ? 'bg-cyan-600/30 text-cyan-400'
-              : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#1E293B]/50'
-          )}
-          title={viewMode === 'output-only' ? 'Show split view' : 'Expand Output'}
-        >
-          {viewMode === 'output-only' ? <Columns className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={runQuery}
+            disabled={loading}
+            className={cn(
+              'px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors',
+              loading
+                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                : 'bg-zinc-700 text-zinc-300 hover:bg-zinc-600'
+            )}
+          >
+            {loading ? 'Searching...' : 'Re-run'}
+          </button>
+          <button
+            onClick={() => onViewChange(viewMode === 'output-only' ? 'split' : 'output-only')}
+            className={cn(
+              'p-1 rounded transition-colors',
+              viewMode === 'output-only'
+                ? 'bg-cyan-600/30 text-cyan-400'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-[#1E293B]/50'
+            )}
+            title={viewMode === 'output-only' ? 'Show split view' : 'Expand Output'}
+          >
+            {viewMode === 'output-only' ? <Columns className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Token Section */}
-        <div className="border border-[#1E293B] bg-[#0F111A] rounded p-3 space-y-2">
-          <div
-            className="flex items-center justify-between cursor-pointer"
-            onClick={() => setTokenExpanded(!tokenExpanded)}
-          >
-            <div className="flex items-center space-x-1.5">
-              <Key className="w-3 h-3 text-zinc-400" />
-              <span className="text-[9px] uppercase text-zinc-400 tracking-wider font-bold">
-                API Token
-              </span>
-            </div>
-            <span className={cn('text-[9px] font-mono', tokenReady ? 'text-emerald-400' : 'text-amber-400')}>
-              {tokenReady ? 'Connected' : 'Not Set'}
-            </span>
-          </div>
-          {tokenExpanded && (
-            <div className="space-y-2">
-              <input
-                type="password"
-                value={tokenInput}
-                onChange={(e) => { setTokenInput(e.target.value); setTokenReady(false); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveToken()}
-                placeholder="Paste Bearer token from DevTools..."
-                className="w-full bg-[#0A0B10] border border-[#1E293B] rounded px-2.5 py-1.5 text-[10px] font-mono text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
-              />
-              <div className="flex space-x-2">
-                <button
-                  onClick={handleSaveToken}
-                  disabled={!tokenInput.trim()}
-                  className={cn(
-                    'flex-1 px-3 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider',
-                    tokenInput.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-500' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-                  )}
-                >Save Token</button>
-                {tokenReady && (
-                  <button onClick={handleClearToken} className="px-3 py-1.5 rounded text-[9px] font-bold uppercase tracking-wider bg-zinc-800 text-zinc-400 hover:bg-zinc-700">
-                    Clear
-                  </button>
-                )}
-              </div>
-              <p className="text-[8px] text-zinc-500 leading-relaxed">
-                Open <span className="text-zinc-400">app.strongtie.com/hs</span> &rarr; DevTools &rarr; Network &rarr; any XHR &rarr; copy Authorization header.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Submit Button */}
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !tokenReady}
-          className={cn(
-            'w-full py-2.5 rounded text-[11px] font-bold uppercase tracking-wider transition-colors flex items-center justify-center space-x-2',
-            loading || !tokenReady
-              ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
-              : 'bg-amber-600 text-white hover:bg-amber-500'
-          )}
-        >
-          <Search className="w-4 h-4" />
-          <span>{loading ? 'Searching...' : `Find Hangers for ${carriedLabel}`}</span>
-        </button>
-
         {/* Error */}
         {error && (
           <div className="flex items-start space-x-2 bg-red-950/50 border border-red-500/30 rounded p-3">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <span className="text-[10px] text-red-400 font-mono leading-relaxed">{error}</span>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="inline-block w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-3"></div>
+            <div className="text-[11px] font-mono text-zinc-500">Querying SST Hanger Selector API...</div>
           </div>
         )}
 
@@ -712,12 +662,6 @@ function OutputPanel({
         {result?.success && result.hangers.length === 0 && (
           <div className="text-center py-8 text-zinc-500 text-[11px] font-mono">
             No matching hangers found for this configuration.
-          </div>
-        )}
-
-        {!result && !loading && !error && (
-          <div className="text-center py-12 text-zinc-600 text-[11px] font-mono">
-            Click "Find Hangers" to search for compatible hanger models.
           </div>
         )}
       </div>
