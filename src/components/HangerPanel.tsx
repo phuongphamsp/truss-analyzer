@@ -10,7 +10,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
-import type { SSTHangerResult, SSTAPIResponse } from '../lib/sst-types';
+import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
 import { buildSSTPayload, buildBatchPayloads } from '../lib/sst-mapper';
 import {
   getSSTToken,
@@ -230,6 +230,123 @@ function BatchResultsView({ results }: BatchResultsViewProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Payload Preview — shows mapped parameters
+// ---------------------------------------------------------------------------
+
+/** Decode SST enum integers to readable labels */
+const MATERIAL_LABELS: Record<number, string> = {
+  1: 'Solid Sawn', 2: 'Glulam', 3: 'LSL', 4: 'LVL',
+  5: 'Truss', 6: 'I-Joist', 7: 'Floor Truss', 10: 'Concrete', 11: 'Steel',
+};
+const STYLE_LABELS: Record<number, string> = {
+  0: 'All', 1: 'Face Mount', 2: 'Top Flange', 3: 'Concealed',
+};
+const ANSITPI_LABELS: Record<number, string> = {
+  0: 'Off', 3: 'End Connection', 6: 'Interior Connection',
+};
+const CODE_LABELS: Record<number, string> = {
+  0: 'None', 10: 'IBC 2018', 20: 'IRC 2018', 30: 'IBC 2021', 40: 'IRC 2021',
+};
+const DL_DUR_LABELS: Record<number, string> = {
+  90: 'Dead', 100: 'Floor', 115: 'Snow', 125: 'Roof', 160: 'Wind/Quake',
+};
+const SKEW_LABELS: Record<number, string> = { 0: 'None', 1: 'Left', 2: 'Right' };
+const SLOPE_LABELS: Record<number, string> = { 0: 'None', 1: 'Up', 2: 'Down' };
+
+interface PayloadPreviewProps {
+  payload: SSTPayload;
+  carriedLabel: string;
+}
+
+function PayloadPreview({ payload, carriedLabel }: PayloadPreviewProps) {
+  const [expanded, setExpanded] = useState(true);
+  const cm = payload.carryingMember;
+  const cd = payload.carriedMembers[0];
+
+  return (
+    <div className="border border-[#1E293B]/60 bg-[#0A0B10] rounded p-2 space-y-2">
+      <div
+        className="flex items-center justify-between cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="text-[8px] uppercase text-zinc-400 tracking-wider font-bold">
+          Mapped Parameters — {carriedLabel}
+        </span>
+        <span className="text-[8px] font-mono text-zinc-500">
+          {expanded ? '[-]' : '[+]'}
+        </span>
+      </div>
+
+      {expanded && (
+        <div className="space-y-2 text-[10px] font-mono">
+          {/* Job Settings */}
+          <div>
+            <div className="text-[8px] uppercase text-indigo-400 font-bold mb-1 tracking-wider">
+              Job Settings
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
+              <Row label="Style" value={STYLE_LABELS[payload.style] ?? String(payload.style)} />
+              <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} />
+              <Row label="ANSI/TPI" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} />
+              <Row label="Flush Option" value={payload.flushOption} />
+              <Row label="DL Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} />
+              <Row label="UL Duration" value={DL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} />
+            </div>
+          </div>
+
+          {/* Carrying Member (Girder) */}
+          <div>
+            <div className="text-[8px] uppercase text-emerald-400 font-bold mb-1 tracking-wider">
+              Carrying Member (Girder)
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
+              <Row label="Material" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} />
+              <Row label="Width" value={`${cm.width}"`} />
+              <Row label="Depth" value={`${cm.depth}"`} />
+              <Row label="Ply" value={String(cm.ply)} />
+              <Row label="King Height" value={`${cm.kingHeight}"`} />
+              <Row label="Top Chord" value={cm.topChord === 0 ? 'N/A' : String(cm.topChord)} />
+            </div>
+          </div>
+
+          {/* Carried Member (Truss) */}
+          <div>
+            <div className="text-[8px] uppercase text-amber-400 font-bold mb-1 tracking-wider">
+              Carried Member (Truss)
+            </div>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-zinc-300">
+              <Row label="Material" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} />
+              <Row label="Width" value={`${cd.width}"`} />
+              <Row label="Depth (Heel)" value={`${cd.depth}"`} />
+              <Row label="Ply" value={String(cd.ply)} />
+              <Row label="Download" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" />
+              <Row label="Uplift" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" />
+              <Row label="Skew" value={`${cd.angle.skewAngle}° (${SKEW_LABELS[cd.angle.skewType] ?? '?'})`} />
+              <Row label="Slope" value={`${cd.angle.slopeAngle}° (${SLOPE_LABELS[cd.angle.slopeType] ?? '?'})`} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Single key-value row for PayloadPreview */
+function Row({ label, value, highlight }: { label: string; value: string; highlight?: 'down' | 'up' }) {
+  const valueColor = highlight === 'down'
+    ? 'text-[#FFB74D]'
+    : highlight === 'up'
+      ? 'text-sky-400'
+      : 'text-zinc-200';
+  return (
+    <>
+      <span className="text-zinc-500 text-[9px]">{label}</span>
+      <span className={cn('text-right font-bold text-[9px]', valueColor)}>{value}</span>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Panel
 // ---------------------------------------------------------------------------
 
@@ -368,6 +485,14 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
           {loading && viewMode === 'batch' ? 'Batch...' : 'Find All'}
         </button>
       </div>
+
+      {/* Payload Preview */}
+      {selectedCarried && (
+        <PayloadPreview
+          payload={buildSSTPayload(group, selectedCarried)}
+          carriedLabel={selectedCarried.instance.label}
+        />
+      )}
 
       {/* Progress */}
       {batchProgress && (
