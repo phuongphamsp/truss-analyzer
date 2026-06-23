@@ -1,20 +1,32 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Truss Analyzer
 
-# Run and deploy your AI Studio app
+Analyze IFC and TRE files to identify Girder Trusses and Carried Trusses with structural diagram visualizations.
 
-This contains everything you need to run your app locally.
+## Tech Stack
 
-View your app in AI Studio: https://ai.studio/apps/77fc2e03-fe00-4b3f-8b4b-788d6e1309f5
+- React 19 + TypeScript
+- Vite 6
+- Tailwind CSS 4
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+   ```
+   npm install
+   ```
+2. Run the app:
+   ```
+   npm run dev
+   ```
+
+## Build
+
+```
+npm run build
+```
+
+## Deploy
+
+Configured for [Railway](https://railway.app). Connect this repo in Railway and it will build and deploy automatically.

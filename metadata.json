@@ -1,8 +1,4 @@
 {
   "name": "Truss Analyzer",
-  "description": "Analyze IFC and TRE files to identify Girder Trusses and Carried Trusses with structural diagram visualizations.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
+  "description": "Analyze IFC and TRE files to identify Girder Trusses and Carried Trusses with structural diagram visualizations."
 }
