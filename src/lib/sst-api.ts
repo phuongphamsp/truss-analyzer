@@ -134,7 +134,7 @@ export async function submitToSST(
         success: false,
         hangers: [],
         error:
-          '401 Unauthorized \u2014 token expired. Get a fresh token from DevTools.',
+          '401 Unauthorized \u2014 SST token expired (tokens expire after ~1 hour). Get a fresh Bearer token by following the guide: https://strongtie-my.sharepoint.com/:x:/p/ppham/IQDyiFcAzOorRaIaaXd0Dj-DAW5Za7fPUhEUGLXOg3IrHDc?e=Tkv2H2',
       };
     }
     if (resp.status === 403) {

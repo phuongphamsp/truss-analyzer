@@ -606,7 +606,23 @@ function OutputPanel({
         {error && (
           <div className="flex items-start space-x-2 bg-red-950/50 border border-red-500/30 rounded p-3">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <span className="text-[10px] text-red-400 font-mono leading-relaxed">{error}</span>
+            <span className="text-[10px] text-red-400 font-mono leading-relaxed">
+              {error.split(/(https?:\/\/\S+)/g).map((part, i) =>
+                /^https?:\/\//.test(part) ? (
+                  <a
+                    key={i}
+                    href={part}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-red-300 hover:text-red-100 break-all"
+                  >
+                    {part}
+                  </a>
+                ) : (
+                  part
+                )
+              )}
+            </span>
           </div>
         )}
 
