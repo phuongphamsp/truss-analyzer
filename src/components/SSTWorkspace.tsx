@@ -3,8 +3,8 @@
  *
  * Replaces the diagrams+sidebar workspace when user clicks "Find Hanger"
  * on a carried truss. Layout mirrors the SST site:
- *   Left column  = INPUT (5 collapsible sections)
- *   Right column = OUTPUT (token, action button, results table)
+ *   Left column  = INPUT (5 collapsible sections, editable Job Settings)
+ *   Right column = OUTPUT (token, action button, results table + filter bar)
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
@@ -16,7 +16,19 @@ import {
   submitToSST,
 } from '../lib/sst-api';
 import { cn } from '../lib/utils';
-import { Search, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
+
+// ---------------------------------------------------------------------------
+// Job Settings overrides — user-editable fields lifted to SSTWorkspace
+// ---------------------------------------------------------------------------
+
+export interface JobOverrides {
+  style: number;
+  fastenerType: number;
+  downloadDurationType: number;
+  upliftLoadDurationType: number;
+  ansitpi: number;
+}
 
 // ---------------------------------------------------------------------------
 // Enum label maps
@@ -125,12 +137,50 @@ function Row({ label, value, highlight, source }: {
 
 type ViewMode = 'split' | 'input-only' | 'output-only';
 
-function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange }: {
+// ---------------------------------------------------------------------------
+// Reusable select control for Job Settings
+// ---------------------------------------------------------------------------
+
+function SelectRow<T extends number>({
+  label,
+  value,
+  options,
+  onChange,
+  source,
+}: {
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  source?: string;
+}) {
+  return (
+    <div className="flex justify-between items-center py-1 px-3 border-b border-[#1E293B]/30 gap-2">
+      <span className="text-zinc-400 text-[10px] shrink-0">{label}</span>
+      <div className="flex flex-col items-end gap-0.5">
+        <select
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value) as T)}
+          className="bg-[#1A1B26] border border-[#2E3A4E] text-zinc-200 text-[10px] rounded px-1.5 py-0.5 cursor-pointer focus:outline-none focus:border-cyan-500/60 hover:border-[#3E4A5E] transition-colors"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        {source && <span className="text-[8px] text-zinc-600 leading-tight">{source}</span>}
+      </div>
+    </div>
+  );
+}
+
+function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange, overrides, onOverridesChange }: {
   payload: SSTPayload;
   girderLabel: string;
   carriedLabel: string;
   viewMode: ViewMode;
   onViewChange: (mode: ViewMode) => void;
+  overrides: JobOverrides;
+  onOverridesChange: (o: JobOverrides) => void;
 }) {
   const [sections, setSections] = useState({
     connection: true,
@@ -148,6 +198,19 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   const cd = payload.carriedMembers[0];
   const isTruss = payload.flushOption === 'BOTTOM';
 
+  const set = <K extends keyof JobOverrides>(key: K, val: JobOverrides[K]) =>
+    onOverridesChange({ ...overrides, [key]: val });
+
+  const defaultOverrides: JobOverrides = {
+    style: payload.style,
+    fastenerType: payload.fastenerType,
+    downloadDurationType: payload.designInformations.downloadDurationType,
+    upliftLoadDurationType: payload.designInformations.upliftLoadDurationType,
+    ansitpi: payload.ansitpi,
+  };
+
+  const isDirty = JSON.stringify(overrides) !== JSON.stringify(defaultOverrides);
+
   return (
     <div className="flex flex-col h-full">
       {/* INPUT header */}
@@ -156,6 +219,16 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           <span className="text-[11px] font-bold text-zinc-200 uppercase tracking-wider">Input</span>
           <div className="flex items-center space-x-2">
             <span className="text-[9px] font-mono text-zinc-500">{carriedLabel} on {girderLabel}</span>
+            {isDirty && (
+              <button
+                onClick={() => onOverridesChange(defaultOverrides)}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 transition-colors"
+                title="Reset to defaults"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Reset
+              </button>
+            )}
             <button
               onClick={() => onViewChange(viewMode === 'input-only' ? 'split' : 'input-only')}
               className={cn(
@@ -208,22 +281,75 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
           </div>
         )}
 
-        {/* 2. JOB SETTINGS */}
+        {/* 2. JOB SETTINGS — editable */}
         <SectionHeader
           title="Job Settings"
           expanded={sections.job}
           onToggle={() => toggle('job')}
-          color="text-zinc-300"
+          color={isDirty ? 'text-amber-400' : 'text-zinc-300'}
         />
         {sections.job && (
           <div className="py-1">
-            <Row label="Hanger Type" value={STYLE_LABELS[payload.style] ?? String(payload.style)} source="default" />
-            <Row label="Fastener Type" value={FASTENER_LABELS[payload.fastenerType] ?? String(payload.fastenerType)} source="default" />
-            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} source="default" />
-            <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} source="mapped from truss type" />
-            <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} source="default" />
+            <SelectRow
+              label="Hanger Style"
+              value={overrides.style}
+              onChange={(v) => set('style', v)}
+              source="filter by mount type"
+              options={[
+                { value: 0, label: 'All Types' },
+                { value: 1, label: 'Face Mount' },
+                { value: 2, label: 'Top Flange' },
+                { value: 3, label: 'Concealed Flange' },
+              ]}
+            />
+            <SelectRow
+              label="Fastener Type"
+              value={overrides.fastenerType}
+              onChange={(v) => set('fastenerType', v)}
+              source="filter by fastener"
+              options={[
+                { value: 0, label: 'All' },
+                { value: 1, label: 'Nails' },
+                { value: 2, label: 'Bolts' },
+                { value: 3, label: 'Screws' },
+              ]}
+            />
+            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} source="default (IRC 2018)" />
+            <SelectRow
+              label="Download Duration"
+              value={overrides.downloadDurationType}
+              onChange={(v) => set('downloadDurationType', v)}
+              source="load duration factor"
+              options={[
+                { value: 90, label: 'Dead (90)' },
+                { value: 100, label: 'Floor (100)' },
+                { value: 115, label: 'Snow (115)' },
+                { value: 125, label: 'Roof (125)' },
+                { value: 160, label: 'Wind/Quake (160)' },
+              ]}
+            />
+            <SelectRow
+              label="Uplift Duration"
+              value={overrides.upliftLoadDurationType}
+              onChange={(v) => set('upliftLoadDurationType', v)}
+              source="uplift duration factor"
+              options={[
+                { value: 100, label: 'Normal (100)' },
+                { value: 160, label: 'Wind/Quake (160)' },
+              ]}
+            />
             {isTruss && (
-              <Row label="ANSI/TPI" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
+              <SelectRow
+                label="ANSI/TPI"
+                value={overrides.ansitpi}
+                onChange={(v) => set('ansitpi', v)}
+                source="truss connection type"
+                options={[
+                  { value: 0, label: 'Off' },
+                  { value: 3, label: 'On (End Connection)' },
+                  { value: 6, label: 'On (Interior Connection)' },
+                ]}
+              />
             )}
           </div>
         )}
@@ -512,6 +638,53 @@ function MappingRow({ section, param, source, logic, sourceTag }: {
 }
 
 // ---------------------------------------------------------------------------
+// Output filter state
+// ---------------------------------------------------------------------------
+
+interface OutputFilters {
+  model: string;
+  minDownload: string;
+  maxDownload: string;
+  minUplift: string;
+  maxUplift: string;
+  minWidth: string;
+  maxWidth: string;
+  minHeight: string;
+  maxHeight: string;
+}
+
+const EMPTY_FILTERS: OutputFilters = {
+  model: '',
+  minDownload: '',
+  maxDownload: '',
+  minUplift: '',
+  maxUplift: '',
+  minWidth: '',
+  maxWidth: '',
+  minHeight: '',
+  maxHeight: '',
+};
+
+function applyFilters(hangers: SSTHangerResult[], f: OutputFilters): SSTHangerResult[] {
+  return hangers.filter((h) => {
+    if (f.model && !h.model.toLowerCase().includes(f.model.toLowerCase())) return false;
+    if (f.minDownload !== '' && h.downloadLoad < Number(f.minDownload)) return false;
+    if (f.maxDownload !== '' && h.downloadLoad > Number(f.maxDownload)) return false;
+    if (f.minUplift !== '' && h.upliftLoad < Number(f.minUplift)) return false;
+    if (f.maxUplift !== '' && h.upliftLoad > Number(f.maxUplift)) return false;
+    if (f.minWidth !== '' && h.width < Number(f.minWidth)) return false;
+    if (f.maxWidth !== '' && h.width > Number(f.maxWidth)) return false;
+    if (f.minHeight !== '' && h.height < Number(f.minHeight)) return false;
+    if (f.maxHeight !== '' && h.height > Number(f.maxHeight)) return false;
+    return true;
+  });
+}
+
+function isFiltersEmpty(f: OutputFilters): boolean {
+  return Object.values(f).every((v) => v === '');
+}
+
+// ---------------------------------------------------------------------------
 // OUTPUT Panel (right column)
 // ---------------------------------------------------------------------------
 
@@ -520,17 +693,32 @@ function OutputPanel({
   carriedLabel,
   viewMode,
   onViewChange,
+  overrides,
 }: {
   payload: SSTPayload;
   carriedLabel: string;
   viewMode: ViewMode;
   onViewChange: (mode: ViewMode) => void;
+  overrides: JobOverrides;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SSTAPIResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<OutputFilters>(EMPTY_FILTERS);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Auto-submit on mount (token already set in sidebar)
+  // Build effective payload with user overrides applied
+  const effectivePayload: SSTPayload = {
+    ...payload,
+    style: overrides.style,
+    fastenerType: overrides.fastenerType,
+    ansitpi: overrides.ansitpi,
+    designInformations: {
+      downloadDurationType: overrides.downloadDurationType,
+      upliftLoadDurationType: overrides.upliftLoadDurationType,
+    },
+  };
+
   const runQuery = useCallback(async () => {
     if (!hasSSTToken()) {
       setError('No SST token set. Please set the Bearer token in the left sidebar first.');
@@ -539,10 +727,11 @@ function OutputPanel({
     setLoading(true);
     setError(null);
     setResult(null);
+    setFilters(EMPTY_FILTERS);
 
     try {
-      console.log('[SST] Payload for', carriedLabel, payload);
-      const res = await submitToSST(payload);
+      console.log('[SST] Payload for', carriedLabel, effectivePayload);
+      const res = await submitToSST(effectivePayload);
       console.log('[SST] Response:', res);
       setResult(res);
       if (!res.success) setError(res.error ?? 'Unknown error');
@@ -551,12 +740,20 @@ function OutputPanel({
     } finally {
       setLoading(false);
     }
-  }, [payload, carriedLabel]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(effectivePayload), carriedLabel]);
 
-  // Auto-run on mount
+  // Auto-run on mount and when overrides change
   useEffect(() => {
     runQuery();
   }, [runQuery]);
+
+  const allHangers = result?.success ? result.hangers : [];
+  const filtered = applyFilters(allHangers, filters);
+  const hasActiveFilters = !isFiltersEmpty(filters);
+
+  const setFilter = <K extends keyof OutputFilters>(key: K, val: string) =>
+    setFilters((f) => ({ ...f, [key]: val }));
 
   return (
     <div className="flex flex-col h-full">
@@ -567,13 +764,35 @@ function OutputPanel({
           {loading && (
             <span className="text-[9px] font-mono text-zinc-400 animate-pulse">Searching...</span>
           )}
-          {result?.success && (
+          {result?.success && !loading && (
             <span className="text-[9px] font-mono text-emerald-400">
-              {result.hangers.length} hangers found
+              {hasActiveFilters
+                ? `${filtered.length} / ${allHangers.length} hangers`
+                : `${allHangers.length} hangers found`}
             </span>
           )}
         </div>
         <div className="flex items-center space-x-2">
+          {result?.success && allHangers.length > 0 && (
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={cn(
+                'flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider transition-colors',
+                showFilters || hasActiveFilters
+                  ? 'bg-cyan-700/30 text-cyan-400 border border-cyan-500/30'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300'
+              )}
+              title="Toggle result filters"
+            >
+              <SlidersHorizontal className="w-3 h-3" />
+              Filter
+              {hasActiveFilters && (
+                <span className="ml-0.5 bg-cyan-500 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center text-[8px] font-black">
+                  {Object.values(filters).filter((v) => v !== '').length}
+                </span>
+              )}
+            </button>
+          )}
           <button
             onClick={runQuery}
             disabled={loading}
@@ -600,6 +819,138 @@ function OutputPanel({
           </button>
         </div>
       </div>
+
+      {/* FILTER BAR */}
+      {showFilters && result?.success && allHangers.length > 0 && (
+        <div className="bg-[#12131C] border-b border-[#1E293B] px-3 py-2 shrink-0">
+          <div className="flex items-center gap-1 mb-2">
+            <SlidersHorizontal className="w-3 h-3 text-zinc-400" />
+            <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider">Filter Results</span>
+            {hasActiveFilters && (
+              <button
+                onClick={() => setFilters(EMPTY_FILTERS)}
+                className="ml-auto flex items-center gap-0.5 text-[9px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-3 h-3" />
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {/* Model search */}
+            <div className="col-span-2 flex items-center gap-2">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Model</label>
+              <div className="relative flex-1">
+                <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-500 pointer-events-none" />
+                <input
+                  type="text"
+                  value={filters.model}
+                  onChange={(e) => setFilter('model', e.target.value)}
+                  placeholder="e.g. LUS, HUS, HHUS..."
+                  className="w-full bg-[#1A1B26] border border-[#2E3A4E] text-zinc-200 text-[10px] rounded pl-6 pr-2 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600"
+                />
+                {filters.model && (
+                  <button onClick={() => setFilter('model', '')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Download Load range */}
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Download ≥</label>
+              <input
+                type="number"
+                value={filters.minDownload}
+                onChange={(e) => setFilter('minDownload', e.target.value)}
+                placeholder="lb"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-[#FFB74D] text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Download ≤</label>
+              <input
+                type="number"
+                value={filters.maxDownload}
+                onChange={(e) => setFilter('maxDownload', e.target.value)}
+                placeholder="lb"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-[#FFB74D] text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+
+            {/* Uplift Load range */}
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Uplift ≥</label>
+              <input
+                type="number"
+                value={filters.minUplift}
+                onChange={(e) => setFilter('minUplift', e.target.value)}
+                placeholder="lb"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-sky-400 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Uplift ≤</label>
+              <input
+                type="number"
+                value={filters.maxUplift}
+                onChange={(e) => setFilter('maxUplift', e.target.value)}
+                placeholder="lb"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-sky-400 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+
+            {/* Width range */}
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Width ≥ (in)</label>
+              <input
+                type="number"
+                step="0.125"
+                value={filters.minWidth}
+                onChange={(e) => setFilter('minWidth', e.target.value)}
+                placeholder="in"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-zinc-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Width ≤ (in)</label>
+              <input
+                type="number"
+                step="0.125"
+                value={filters.maxWidth}
+                onChange={(e) => setFilter('maxWidth', e.target.value)}
+                placeholder="in"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-zinc-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+
+            {/* Height range */}
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Height ≥ (in)</label>
+              <input
+                type="number"
+                step="0.125"
+                value={filters.minHeight}
+                onChange={(e) => setFilter('minHeight', e.target.value)}
+                placeholder="in"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-zinc-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[9px] text-zinc-500 w-20 shrink-0">Height ≤ (in)</label>
+              <input
+                type="number"
+                step="0.125"
+                value={filters.maxHeight}
+                onChange={(e) => setFilter('maxHeight', e.target.value)}
+                placeholder="in"
+                className="flex-1 bg-[#1A1B26] border border-[#2E3A4E] text-zinc-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-cyan-500/60 placeholder:text-zinc-600 w-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Error */}
@@ -635,12 +986,14 @@ function OutputPanel({
         )}
 
         {/* Results Table */}
-        {result?.success && result.hangers.length > 0 && (
+        {result?.success && allHangers.length > 0 && (
           <div className="border border-[#1E293B] bg-[#0F111A] rounded overflow-hidden">
             <div className="px-3 py-2 bg-[#1A1B26] border-b border-[#1E293B]/60 flex items-center justify-between">
               <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">Results</span>
               <span className="text-[9px] font-mono text-zinc-500">
-                Showing {result.hangers.length} entries
+                {hasActiveFilters
+                  ? `${filtered.length} of ${allHangers.length} entries`
+                  : `${allHangers.length} entries`}
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -656,26 +1009,37 @@ function OutputPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {result.hangers.map((h, i) => (
-                    <tr
-                      key={`${h.model}-${i}`}
-                      className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
-                    >
-                      <td className="py-2 px-3 font-bold text-zinc-200">{h.model}</td>
-                      <td className="py-2 px-3 text-right text-[#FFB74D] font-bold">{h.downloadLoad.toLocaleString()}</td>
-                      <td className="py-2 px-3 text-right text-sky-400">{h.upliftLoad.toLocaleString()}</td>
-                      <td className="py-2 px-3 text-right text-zinc-400">{h.width > 0 ? `${h.width.toFixed(3)}"` : '\u2014'}</td>
-                      <td className="py-2 px-3 text-right text-zinc-400">{h.height > 0 ? `${h.height.toFixed(3)}"` : '\u2014'}</td>
-                      <td className="py-2 px-3 text-right text-zinc-400">{h.bearing > 0 ? `${h.bearing.toFixed(3)}"` : '\u2014'}</td>
+                  {filtered.length > 0 ? (
+                    filtered.map((h, i) => (
+                      <tr
+                        key={`${h.model}-${i}`}
+                        className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
+                      >
+                        <td className="py-2 px-3 font-bold text-zinc-200">{h.model}</td>
+                        <td className="py-2 px-3 text-right text-[#FFB74D] font-bold">{h.downloadLoad.toLocaleString()}</td>
+                        <td className="py-2 px-3 text-right text-sky-400">{h.upliftLoad.toLocaleString()}</td>
+                        <td className="py-2 px-3 text-right text-zinc-400">{h.width > 0 ? `${h.width.toFixed(3)}"` : '\u2014'}</td>
+                        <td className="py-2 px-3 text-right text-zinc-400">{h.height > 0 ? `${h.height.toFixed(3)}"` : '\u2014'}</td>
+                        <td className="py-2 px-3 text-right text-zinc-400">{h.bearing > 0 ? `${h.bearing.toFixed(3)}"` : '\u2014'}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-zinc-500 text-[10px] font-mono">
+                        No hangers match the current filters.{' '}
+                        <button onClick={() => setFilters(EMPTY_FILTERS)} className="text-cyan-400 hover:text-cyan-300 underline">
+                          Clear filters
+                        </button>
+                      </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
-        {result?.success && result.hangers.length === 0 && (
+        {result?.success && allHangers.length === 0 && (
           <div className="text-center py-8 text-zinc-500 text-[11px] font-mono">
             No matching hangers found for this configuration.
           </div>
@@ -698,6 +1062,27 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
   const payload = buildSSTPayload(group, selectedCarried);
   const [viewMode, setViewMode] = useState<ViewMode>('output-only');
 
+  // Job Settings overrides — lifted here so OutputPanel re-runs when changed
+  const [overrides, setOverrides] = useState<JobOverrides>({
+    style: payload.style,
+    fastenerType: payload.fastenerType,
+    downloadDurationType: payload.designInformations.downloadDurationType,
+    upliftLoadDurationType: payload.designInformations.upliftLoadDurationType,
+    ansitpi: payload.ansitpi,
+  });
+
+  // Reset overrides when selected truss changes
+  useEffect(() => {
+    setOverrides({
+      style: payload.style,
+      fastenerType: payload.fastenerType,
+      downloadDurationType: payload.designInformations.downloadDurationType,
+      upliftLoadDurationType: payload.designInformations.upliftLoadDurationType,
+      ansitpi: payload.ansitpi,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCarried.instance.id]);
+
   const showInput = viewMode === 'split' || viewMode === 'input-only';
   const showOutput = viewMode === 'split' || viewMode === 'output-only';
 
@@ -715,6 +1100,8 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
             carriedLabel={selectedCarried.instance.label}
             viewMode={viewMode}
             onViewChange={setViewMode}
+            overrides={overrides}
+            onOverridesChange={setOverrides}
           />
         </div>
       )}
@@ -742,6 +1129,7 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
             carriedLabel={selectedCarried.instance.label}
             viewMode={viewMode}
             onViewChange={setViewMode}
+            overrides={overrides}
           />
         </div>
       )}
