@@ -77,7 +77,14 @@ export default function App() {
                 {/* App name to be added later */}
             </div>
             <div className="flex items-center space-x-2">
-                {/* Engine status text removed */}
+                <a
+                    href="https://tremap-production.up.railway.app/connections.html?id=J03B__J04"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-[#141414] hover:underline"
+                >
+                    Truss Connections
+                </a>
             </div>
         </header>
 
