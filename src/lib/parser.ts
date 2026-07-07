@@ -544,7 +544,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number }> = [];
+  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -558,13 +558,18 @@ function parseHangers(text: string) {
       const parts = trimmed.split('=')[1]?.trim().split(/\s+/);
       if (parts && parts.length > 6) {
         const xInches = parseFloat(parts[2]);
+        // bearingLocation is at field index 16 (0-based) of the value after '='
+        // e.g. LG0T=0 1 30.0001 0 J06C 1.5 17.1006 9 2 1 0 0 0 0 90 0 71.1875 ...
+        //       [0][1]  [2]    [3] [4]  [5]  [6]   [7][8][9]...          [16]
+        const bearingLocation = parts.length > 16 ? parseFloat(parts[16]) : 0;
         if (!isNaN(xInches)) {
           hangers.push({
-            xFeet: xInches / 12, // It's already in inches
+            xFeet: xInches / 12,
             xInches: xInches,
             label: parts[4],
             width: parseFloat(parts[5]) || 0,
-            heelHeight: parseFloat(parts[6]) || 0
+            heelHeight: parseFloat(parts[6]) || 0,
+            bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation
           });
         }
       }
@@ -784,7 +789,120 @@ function parseTre(text: string, filename: string): TreData | null {
     hangers,
     leftHeel,
     rightHeel,
-    csi
+    csi,
+    rawText: text
+  };
+}
+
+/**
+ * TRE-based Bearing Detection
+ *
+ * Xác định downReaction và upliftReaction tại một bearing location cụ thể
+ * bằng cách đọc trực tiếp từ REACTION INFO section trong carried truss TRE.
+ *
+ * Cách hoạt động:
+ * 1. Mỗi hanger LG*T trong girder TRE có ghi sẵn bearingLocation (field[16])
+ *    ví dụ: LG0T=0 1 30.0001 0 J06C 1.5 17.1006 9 2 1 0 0 0 0 90 0 71.1875 ...
+ *                                                                       ^^^^^
+ *                                                               bearingLocation = 71.1875"
+ *
+ * 2. Carried truss TRE có section REACTION INFO với N load cases.
+ *    Mỗi load case là 1 block gồm:
+ *    - Header line: "2 -1 -1 -1 -1 <bearingA> <bearingB> ..."
+ *      → bearingA và bearingB là 2 đầu bearing của carried truss
+ *    - Data lines: mỗi nhóm ứng với 1 bearing end
+ *      → dòng tổng (governing) có col[6] = -1
+ *      → col[1] = reaction value tại bearing đó
+ *
+ * 3. Match bearingLocation từ girder TRE với bearingA hoặc bearingB trong header
+ *    → chỉ đọc nhóm data lines tương ứng với bearing đó
+ *    → lấy dòng tổng (col[6] = -1) của nhóm đó
+ *
+ * 4. Loop tất cả load cases → collect values
+ *    → downReaction  = max(values)  (giá trị dương lớn nhất)
+ *    → upliftReaction = min(values) (giá trị âm nhỏ nhất)
+ *
+ * Ưu điểm so với IFC bbox method:
+ * - Không phụ thuộc IFC file
+ * - Không bị MOCK (luôn có kết quả nếu có TRE)
+ * - Chính xác hơn vì dùng đúng bearing location từ TRE
+ */
+const BEARING_LOCATION_TOLERANCE = 0.5; // inches
+
+function parseReactionAtBearing(
+  carriedTreTxt: string,
+  targetBearing: number
+): { downReaction: number; upliftReaction: number } | null {
+  const lines = carriedTreTxt.split('\n');
+
+  // Tìm REACTION INFO section
+  let i = 0;
+  while (i < lines.length && lines[i].trim() !== 'REACTION INFO') i++;
+  if (i >= lines.length) return null;
+
+  i++; // bỏ qua "REACTION INFO"
+  // Bỏ qua dòng số load cases
+  while (i < lines.length && lines[i].trim() === '') i++;
+  i++; // bỏ qua count line
+
+  const values: number[] = [];
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    // Header block: "2 -1 -1 -1 -1 <bearingA> <bearingB> ..."
+    if (!line.startsWith('2 -1 -1 -1 -1')) { i++; continue; }
+
+    const hp = line.split(/\s+/);
+    if (hp.length < 7) { i++; continue; }
+
+    const bearingA = parseFloat(hp[5]); // e.g. 0.000000
+    const bearingB = parseFloat(hp[6]); // e.g. 71.187500
+
+    // Xác định targetBearing khớp với bearing nào
+    const matchA = Math.abs(bearingA - targetBearing) <= BEARING_LOCATION_TOLERANCE;
+    const matchB = Math.abs(bearingB - targetBearing) <= BEARING_LOCATION_TOLERANCE;
+    if (!matchA && !matchB) { i++; continue; }
+
+    const matchedBearing = matchA ? bearingA : bearingB;
+
+    // Đọc data lines của block này
+    i++;
+    while (i < lines.length) {
+      const dl = lines[i].trim();
+
+      // Kết thúc block khi gặp header mới
+      if (dl.startsWith('2 -1 -1 -1 -1')) break;
+      // Kết thúc section
+      if (dl === 'REACTION INFO' || (dl.startsWith('[') && dl !== '')) break;
+
+      if (!dl.startsWith('0')) { i++; continue; }
+
+      // Data line: "0  <value>  <indicator>  <bearingLoc>  <width>  2  <loadType>  ..."
+      // col[0]=0, col[1]=value, col[2]=indicator, col[3]=bearingLoc, col[6]=loadType(-1=total)
+      const dp = dl.split(/\s+/);
+      if (dp.length < 7) { i++; continue; }
+
+      const value      = parseFloat(dp[1]);
+      const bearingLoc = parseFloat(dp[3]);
+      const loadType   = parseFloat(dp[6]); // -1 = dòng tổng (governing)
+
+      const isTotal        = loadType === -1;
+      const isMatchBearing = Math.abs(bearingLoc - matchedBearing) <= BEARING_LOCATION_TOLERANCE;
+
+      if (isTotal && isMatchBearing) {
+        values.push(value);
+      }
+
+      i++;
+    }
+  }
+
+  if (values.length === 0) return null;
+
+  return {
+    downReaction:   Math.max(...values),
+    upliftReaction: Math.min(...values),
   };
 }
 
@@ -815,19 +933,39 @@ function determinePhysicalCarriedEnd(c: TrussInstance, girder: TrussInstance): '
 }
 
 function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInstance) {
-  carriedTrusses.forEach(c => {
+  const girderHangers = girder.treData?.hangers || [];
+
+  carriedTrusses.forEach((c, idx) => {
+    const hanger = girderHangers[idx];
+    const carriedTreTxt = c.treData?.rawText;
+
+    // --- TRE-based Bearing Detection (primary method) ---
+    // Dùng bearingLocation từ LG*T line trong girder TRE để tìm đúng reaction
+    // trong REACTION INFO của carried truss TRE.
+    if (hanger && hanger.bearingLocation > 0 && carriedTreTxt) {
+      const result = parseReactionAtBearing(carriedTreTxt, hanger.bearingLocation);
+      if (result) {
+        c.downReaction   = result.downReaction;
+        c.upliftReaction = result.upliftReaction;
+        c.bearingSide    = undefined; // không cần left/right với phương pháp này
+        return;
+      }
+    }
+
+    // --- Fallback: IFC bbox method ---
+    // Dùng khi không có bearingLocation hoặc không parse được REACTION INFO
     const bearingSide = determinePhysicalCarriedEnd(c.instance, girder);
     c.bearingSide = bearingSide;
-    
+
     const cTre = c.treData;
     const rx = cTre?.reactions || getDefaultReactions(c.instance.label);
-    
+
     if (bearingSide === 'left') {
-      c.downReaction = rx.leftDown;       // Reaction1
-      c.upliftReaction = rx.leftUp;       // Max Uplift1
+      c.downReaction   = rx.leftDown;  // Reaction1
+      c.upliftReaction = rx.leftUp;    // Max Uplift1
     } else {
-      c.downReaction = rx.rightDown;     // Reaction2
-      c.upliftReaction = rx.rightUp;     // Max Uplift2
+      c.downReaction   = rx.rightDown; // Reaction2
+      c.upliftReaction = rx.rightUp;   // Max Uplift2
     }
   });
 }

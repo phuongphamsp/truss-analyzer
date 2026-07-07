@@ -1,6 +1,7 @@
 export interface TreData {
   label: string;
   isGirder?: boolean;
+  rawText?: string;  // raw TRE file content, used for TRE-based bearing detection
   topChord: string;
   bottomChord: string;
   webs: string;
@@ -36,6 +37,7 @@ export interface TreData {
     label: string;
     width: number;
     heelHeight: number;
+    bearingLocation: number;  // bearing location of carried truss at this hanger (inches), from LG*T field[16]
   }>;
 }
 
