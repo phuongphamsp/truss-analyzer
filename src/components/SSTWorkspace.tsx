@@ -463,177 +463,102 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         {sections.mapping && (
           <div className="py-2 px-3 space-y-3 text-[9px] font-mono">
 
-            {/* Overview */}
-            <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-1.5">
-              <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Overview</div>
-              <p className="text-zinc-400 leading-relaxed">
-                Data is extracted from <span className="text-zinc-200">IFC</span> (geometry, spatial layout) and <span className="text-zinc-200">TRE</span> (engineering properties, reactions) files,
-                then mapped to SST Hanger Selector API input parameters.
-              </p>
-              <p className="text-zinc-400 leading-relaxed">
-                Flow: <span className="text-zinc-200">IFC parse</span> &rarr; <span className="text-zinc-200">TRE parse</span> &rarr; <span className="text-zinc-200">enrichCarriedTrusses()</span> &rarr; <span className="text-zinc-200">buildSSTPayload()</span> &rarr; <span className="text-zinc-200">SST API</span>
-              </p>
+            {/* Data Flow */}
+            <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-2">
+              <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider mb-1">Data Flow</div>
+              <div className="flex items-center gap-1 flex-wrap text-[9px]">
+                {(['TRE file', '→', 'parser.ts', '→', 'enrichCarriedTrusses()', '→', 'buildSSTPayload()', '→', 'SST API'] as string[]).map((s, i) =>
+                  s === '→'
+                    ? <span key={i} className="text-zinc-600">→</span>
+                    : <span key={i} className="bg-[#1E293B]/60 text-zinc-300 px-1.5 py-0.5 rounded">{s}</span>
+                )}
+              </div>
+              <div className="text-zinc-500 leading-relaxed pt-0.5">
+                Each field below shows exactly which TRE section/field it reads from, so engineers can cross-check values directly in the source file.
+              </div>
             </div>
 
-            {/* Mapping table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-[8px] uppercase text-zinc-500 border-b border-[#1E293B]">
-                    <th className="py-1.5 pr-2">SST Parameter</th>
-                    <th className="py-1.5 pr-2">Source</th>
-                    <th className="py-1.5">Mapping Logic</th>
-                  </tr>
-                </thead>
-                <tbody className="text-zinc-400">
-                  {/* Connection Type */}
-                  <MappingRow section="Connection Type" />
-                  <MappingRow
-                    param="flushOption"
-                    source="Hardcoded"
-                    logic="Always 'BOTTOM' (Truss/Flush Bottom) — girder-to-truss connections"
-                  />
-
-                  {/* Job Settings */}
-                  <MappingRow section="Job Settings" />
-                  <MappingRow
-                    param="buildingCode"
-                    source="Default"
-                    logic="IRC 2018 (code 20) — residential building code"
-                  />
-                  <MappingRow
-                    param="downloadDurationType"
-                    source="Default"
-                    logic="Roof (125) — standard for roof truss loading"
-                  />
-                  <MappingRow
-                    param="upliftLoadDurationType"
-                    source="Default"
-                    logic="Wind/Quake (160) — conservative for uplift"
-                  />
-                  <MappingRow
-                    param="ansitpi"
-                    source="Default"
-                    logic="Interior Connection (6) — carried truss bears on girder mid-span"
-                  />
-                  <MappingRow
-                    param="style"
-                    source="Default"
-                    logic="All Types (0) — no filter on hanger style"
-                  />
-
-                  {/* Carrying Member */}
-                  <MappingRow section="Carrying Member (Girder)" />
-                  <MappingRow
-                    param="material"
-                    source="Hardcoded"
-                    logic="Truss (5) — girder is a truss member"
-                  />
-                  <MappingRow
-                    param="width"
-                    source="TRE"
-                    logic="treData.members[BottomChord].width — actual lumber width of girder bottom chord (e.g. 1.5&quot; for 2x)"
-                    sourceTag="tre"
-                  />
-                  <MappingRow
-                    param="depth"
-                    source="TRE"
-                    logic="treData.members[BottomChord].depth — actual lumber depth of girder bottom chord (e.g. 5.5&quot; for 2x6)"
-                    sourceTag="tre"
-                  />
-                  <MappingRow
-                    param="ply"
-                    source="Default"
-                    logic="1 — ply count not parsed from TRE files"
-                  />
-                  <MappingRow
-                    param="kingHeight"
-                    source="TRE"
-                    logic="max(girder.treData.leftHeel, depth, 24.0) — overall girder height at connection, fallback 24&quot;"
-                    sourceTag="tre"
-                  />
-                  <MappingRow
-                    param="kingWidth"
-                    source="N/A"
-                    logic="0 — king post width not available in TRE data"
-                  />
-
-                  {/* Carried Member */}
-                  <MappingRow section="Carried Member (Truss)" />
-                  <MappingRow
-                    param="material"
-                    source="Hardcoded"
-                    logic="Truss (5) — carried member is a truss"
-                  />
-                  <MappingRow
-                    param="width"
-                    source="TRE"
-                    logic="carried.treData.members[BottomChord].width — actual lumber width (e.g. 1.5&quot; for 2x)"
-                    sourceTag="tre"
-                  />
-                  <MappingRow
-                    param="depth (heel)"
-                    source="TRE"
-                    logic="carried.treData.leftHeel or rightHeel based on bearingSide — heel height at the bearing point"
-                    sourceTag="tre"
-                  />
-                  <MappingRow
-                    param="ply"
-                    source="Default"
-                    logic="1 — ply count not parsed from TRE files"
-                  />
-                  <MappingRow
-                    param="loads.load"
-                    source="TRE + IFC"
-                    logic="carried.downReaction — computed by enrichCarriedTrusses() from TRE maxReaction + IFC bearing side geometry"
-                    sourceTag="both"
-                  />
-                  <MappingRow
-                    param="loads.uplift"
-                    source="TRE + IFC"
-                    logic="abs(carried.upliftReaction) — computed from TRE uplift reactions + IFC bearing side"
-                    sourceTag="both"
-                  />
-
-                  {/* Hanger Options */}
-                  <MappingRow section="Hanger Options" />
-                  <MappingRow
-                    param="skewAngle"
-                    source="N/A"
-                    logic="0° — bearing skew angle not available in TRE/IFC data"
-                  />
-                  <MappingRow
-                    param="slopeAngle"
-                    source="N/A"
-                    logic="0° — truss bottom chord assumed level at bearing"
-                  />
-                </tbody>
-              </table>
+            {/* Bearing Side Detection */}
+            <div className="bg-[#0A0B10] border border-amber-900/30 rounded p-2.5 space-y-1.5">
+              <div className="text-[8px] uppercase text-amber-500 font-bold tracking-wider">Bearing Side Detection (Critical)</div>
+              <div className="space-y-1 text-zinc-400 leading-relaxed">
+                <div><span className="text-zinc-200">Step 1 — Girder TRE</span> · Section <span className="text-amber-400">[Hanger Loading Info.]</span> · Line <span className="text-amber-400">LG{'{n}'}T=...</span> · Field <span className="text-amber-400">parts[16]</span> = bearing coordinate on carried truss (inches)</div>
+                <div><span className="text-zinc-200">Step 2 — Carried TRE</span> · Section <span className="text-amber-400">REACTION INFO</span> · Header line <span className="text-amber-400">2 -1 -1 -1 -1 &lt;bearingA&gt; &lt;bearingB&gt;</span></div>
+                <div><span className="text-zinc-200">Step 3 — Match</span> · <span className="text-amber-400">bearingA</span> (smaller, x≈0) = <span className="text-green-400">LEFT end</span> · <span className="text-amber-400">bearingB</span> (larger, x≈span) = <span className="text-green-400">RIGHT end</span> · Tolerance ±4.1"</div>
+                <div><span className="text-zinc-200">Fallback</span> · If no match → IFC bounding box geometry used to determine bearing side</div>
+              </div>
             </div>
 
-            {/* Data gaps */}
+            {/* Field-by-field mapping */}
+            <div className="space-y-2">
+
+              {/* JOB SETTINGS */}
+              <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5">Job Settings</div>
+              <div className="space-y-1">
+                <MappingRow2 label="Job ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField={`LG{n}T= parts[4] (carried label) + girder label`} note="e.g. T07 on T04" />
+                <MappingRow2 label="Building Code" badge="Default" badgeColor="gray" note="IRC 2018" />
+                <MappingRow2 label="Duration of Load" badge="Default" badgeColor="gray" note="Roof = 1.25 (download) · Wind/Quake = 1.60 (uplift)" />
+                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Default" badgeColor="gray" note="Interior Connection (6) — carried truss bears on girder mid-span" />
+                <MappingRow2 label="Hanger Type" badge="Default" badgeColor="gray" note="All Types (0) — no filter" />
+              </div>
+
+              {/* CARRYING MEMBER */}
+              <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5 pt-1">Carrying Member (Girder)</div>
+              <div className="space-y-1">
+                <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → girder label" note="e.g. T07" />
+                <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
+                <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
+                <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
+                <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
+                <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="max(leftHeel, BC depth, 24&quot;) — overall girder height at connection point" />
+                <MappingRow2 label="Vertical Width (King Post)" badge="Computed" badgeColor="amber" note="Scans Web members for vertical segment at connection X ±2&quot; · width of that web member" />
+              </div>
+
+              {/* CARRIED MEMBER */}
+              <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5 pt-1">Carried Member (Truss)</div>
+              <div className="space-y-1">
+                <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → carried label" note="e.g. T02" />
+                <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
+                <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
+                <MappingRow2 label="Heel Height" badge="TRE" badgeColor="green"
+                  treSection="[TRUSS DETAILS]"
+                  treField="Left Heel Height= or Right Heel Height= (chosen by bearing side)"
+                  note="bearingSide=left → Left Heel Height · bearingSide=right → Right Heel Height"
+                />
+                <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
+                <MappingRow2 label="Download (ASD)" badge="Computed" badgeColor="amber"
+                  treSection="REACTION INFO"
+                  treField="max(col[1]) where col[6]=-1 (governing) and col[3] matches bearing coordinate"
+                  note="max downward reaction across all load cases at the bearing end"
+                />
+                <MappingRow2 label="Uplift (ASD)" badge="Computed" badgeColor="amber"
+                  treSection="REACTION INFO"
+                  treField="min(col[1]) where col[6]=-1 (governing) and col[3] matches bearing coordinate"
+                  note="min (most negative) uplift reaction across all load cases"
+                />
+              </div>
+
+              {/* HANGER OPTIONS */}
+              <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5 pt-1">Hanger Options</div>
+              <div className="space-y-1">
+                <MappingRow2 label="Skew (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+                <MappingRow2 label="Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+                <MappingRow2 label="Top Flange Bend (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+                <MappingRow2 label="Top Flange Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+              </div>
+            </div>
+
+            {/* Known gaps */}
             <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-1">
               <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Known Data Gaps</div>
-              <ul className="text-zinc-400 leading-relaxed space-y-0.5 list-disc list-inside">
-                <li><span className="text-zinc-300">Ply count</span> — not parsed from TRE; defaults to 1</li>
-                <li><span className="text-zinc-300">Skew angle</span> — bearing orientation not in TRE/IFC; defaults to 0°</li>
-                <li><span className="text-zinc-300">King width</span> — king post width not in TRE; defaults to 0</li>
-                <li><span className="text-zinc-300">Species</span> — available in TRE but not yet mapped to SST species codes</li>
-                <li><span className="text-zinc-300">Lateral load</span> — not available in TRE/IFC data</li>
-                <li><span className="text-zinc-300">Corrosion environment</span> — not available; assumes standard indoor</li>
+              <ul className="text-zinc-500 leading-relaxed space-y-0.5 list-disc list-inside">
+                <li><span className="text-zinc-300">Ply count</span> — not in TRE; defaults to 1</li>
+                <li><span className="text-zinc-300">Skew / Slope / Top Flange angles</span> — not in TRE/IFC; all default to 0°</li>
+                <li><span className="text-zinc-300">Species grade mapping</span> — TRE has grade string (e.g. "No.2 SP") but SST uses numeric codes; not yet mapped</li>
+                <li><span className="text-zinc-300">Lateral load</span> — not available in TRE/IFC</li>
               </ul>
             </div>
 
-            {/* Source files */}
-            <div className="bg-[#0A0B10] border border-[#1E293B]/40 rounded p-2.5 space-y-1">
-              <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Source Code References</div>
-              <div className="text-zinc-500 leading-relaxed space-y-0.5">
-                <div><span className="text-zinc-300">parser.ts</span> — enrichCarriedTrusses(): computes reactions, bearingSide from IFC+TRE</div>
-                <div><span className="text-zinc-300">sst-mapper.ts</span> — buildSSTPayload(): maps GirderGroup+CarriedTruss to API payload</div>
-                <div><span className="text-zinc-300">sst-types.ts</span> — API constants, enum values, TypeScript interfaces</div>
-                <div><span className="text-zinc-300">sst-api.ts</span> — HTTP client, token management, response parsing</div>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -641,38 +566,48 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   );
 }
 
-/** Section divider row in mapping table */
+/** Legacy mapping row — kept for compatibility */
 function MappingRow({ section, param, source, logic, sourceTag }: {
-  section?: string;
-  param?: string;
-  source?: string;
-  logic?: string;
-  sourceTag?: 'ifc' | 'tre' | 'both';
+  section?: string; param?: string; source?: string; logic?: string; sourceTag?: 'ifc' | 'tre' | 'both';
 }) {
-  if (section) {
-    return (
-      <tr>
-        <td colSpan={3} className="pt-2.5 pb-1 text-[8px] uppercase font-bold text-zinc-300 tracking-wider border-b border-[#1E293B]/40">
-          {section}
-        </td>
-      </tr>
-    );
-  }
-
-  const sourceColor = sourceTag === 'ifc'
-    ? 'text-zinc-300'
-    : sourceTag === 'tre'
-      ? 'text-zinc-300'
-      : sourceTag === 'both'
-        ? 'text-zinc-300'
-        : 'text-zinc-500';
-
+  if (section) return <tr><td colSpan={3} className="pt-2.5 pb-1 text-[8px] uppercase font-bold text-zinc-300 tracking-wider border-b border-[#1E293B]/40">{section}</td></tr>;
   return (
     <tr className="border-b border-[#1E293B]/20 hover:bg-[#1E293B]/10">
       <td className="py-1 pr-2 text-zinc-200 font-bold whitespace-nowrap">{param}</td>
-      <td className={cn('py-1 pr-2 whitespace-nowrap', sourceColor)}>{source}</td>
+      <td className="py-1 pr-2 text-zinc-300 whitespace-nowrap">{source}</td>
       <td className="py-1 text-zinc-500 leading-relaxed">{logic}</td>
     </tr>
+  );
+}
+
+/** Engineering-friendly mapping row */
+function MappingRow2({ label, badge, badgeColor, treSection, treField, note }: {
+  label: string;
+  badge: string;
+  badgeColor: 'green' | 'amber' | 'gray' | 'red';
+  treSection?: string;
+  treField?: string;
+  note?: string;
+}) {
+  const badgeCls = {
+    green: 'bg-green-900/40 text-green-400 border border-green-800/40',
+    amber: 'bg-amber-900/40 text-amber-400 border border-amber-800/40',
+    gray:  'bg-zinc-800/60 text-zinc-400 border border-zinc-700/40',
+    red:   'bg-red-900/30 text-red-400 border border-red-800/40',
+  }[badgeColor];
+
+  return (
+    <div className="grid grid-cols-[140px_1fr] gap-x-2 py-1 border-b border-[#1E293B]/20 hover:bg-[#1E293B]/10 rounded px-1">
+      <div className="flex items-start gap-1.5 min-w-0">
+        <span className={cn('shrink-0 text-[7px] px-1 py-0.5 rounded font-bold uppercase tracking-wide', badgeCls)}>{badge}</span>
+        <span className="text-zinc-200 leading-tight">{label}</span>
+      </div>
+      <div className="space-y-0.5 min-w-0">
+        {treSection && <div className="text-zinc-500">Section: <span className="text-amber-400/80">{treSection}</span></div>}
+        {treField   && <div className="text-zinc-500">Field: <span className="text-zinc-300">{treField}</span></div>}
+        {note       && <div className="text-zinc-600 italic">{note}</div>}
+      </div>
+    </div>
   );
 }
 
