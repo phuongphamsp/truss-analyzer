@@ -881,8 +881,9 @@ function parseTre(text: string, filename: string): TreData | null {
   let leftHeel = defaults.leftHeel;
   let rightHeel = defaults.rightHeel;
 
-  const hmL = text.match(/HeelHeightLeft\s*=\s*([\d.]+)/i);
-  const hmR = text.match(/HeelHeightRight\s*=\s*([\d.]+)/i);
+  // TRE format: "Left Heel Height=4.1600" or legacy "HeelHeightLeft=..."
+  const hmL = text.match(/Left\s+Heel\s+Height\s*=\s*([\d.]+)/i) ?? text.match(/HeelHeightLeft\s*=\s*([\d.]+)/i);
+  const hmR = text.match(/Right\s+Heel\s+Height\s*=\s*([\d.]+)/i) ?? text.match(/HeelHeightRight\s*=\s*([\d.]+)/i);
   if (hmL) leftHeel = parseFloat(hmL[1]);
   if (hmR) rightHeel = parseFloat(hmR[1]);
   
