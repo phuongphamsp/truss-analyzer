@@ -446,10 +446,10 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.hanger && (
           <div className="py-1">
-            <Row label="Skew Angle" value={`${cd.angle.skewAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Skew Direction" value={SKEW_LABELS[cd.angle.skewType] ?? 'None'} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Slope Angle" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Slope Direction" value={SLOPE_LABELS[cd.angle.slopeType] ?? 'None'} sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Skew (Degrees)" value={`${cd.angle.skewAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
           </div>
         )}
 
