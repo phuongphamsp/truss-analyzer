@@ -459,7 +459,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
             <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType={cm.kingWidth > 0 ? 'computed' : 'unknown'} sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
                 <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
