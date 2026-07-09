@@ -107,24 +107,43 @@ function SectionHeader({
   );
 }
 
-function Row({ label, value, highlight, source }: {
+/** How a field's value was obtained — drives the badge color */
+type SourceType = 'tre' | 'computed' | 'default' | 'unknown';
+
+const SOURCE_META: Record<SourceType, { label: string; color: string }> = {
+  tre:      { label: 'TRE/IFC',   color: 'text-emerald-500' },
+  computed: { label: 'computed',  color: 'text-amber-400'   },
+  default:  { label: 'default',   color: 'text-zinc-500'    },
+  unknown:  { label: 'unknown',   color: 'text-rose-400'    },
+};
+
+function Row({ label, value, highlight, sourceType, sourceNote }: {
   label: string;
   value: string;
   highlight?: 'down' | 'up';
-  source?: string;
+  sourceType?: SourceType;
+  sourceNote?: string;
 }) {
   const valueColor = highlight === 'down'
     ? 'text-[#FFB74D]'
     : highlight === 'up'
       ? 'text-sky-400'
       : 'text-zinc-200';
+  const meta = sourceType ? SOURCE_META[sourceType] : null;
   return (
     <div className="flex justify-between items-start py-1 px-3 border-b border-[#1E293B]/30">
       <span className="text-zinc-400 text-[10px]">{label}</span>
       <div className="text-right">
         <span className={cn('font-bold text-[10px]', valueColor)}>{value}</span>
-        {source && (
-          <div className="text-[8px] text-zinc-600 leading-tight">{source}</div>
+        {meta && (
+          <div className="flex items-center justify-end gap-1 mt-0.5">
+            <span className={cn('text-[7px] font-semibold uppercase tracking-wide', meta.color)}>
+              [{meta.label}]
+            </span>
+            {sourceNote && (
+              <span className="text-[7px] text-zinc-600 leading-tight">{sourceNote}</span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -146,14 +165,17 @@ function SelectRow<T extends number>({
   value,
   options,
   onChange,
-  source,
+  sourceType,
+  sourceNote,
 }: {
   label: string;
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
-  source?: string;
+  sourceType?: SourceType;
+  sourceNote?: string;
 }) {
+  const meta = sourceType ? SOURCE_META[sourceType] : null;
   return (
     <div className="flex justify-between items-center py-1 px-3 border-b border-[#1E293B]/30 gap-2">
       <span className="text-zinc-400 text-[10px] shrink-0">{label}</span>
@@ -167,7 +189,16 @@ function SelectRow<T extends number>({
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        {source && <span className="text-[8px] text-zinc-600 leading-tight">{source}</span>}
+        {meta && (
+          <div className="flex items-center justify-end gap-1">
+            <span className={cn('text-[7px] font-semibold uppercase tracking-wide', meta.color)}>
+              [{meta.label}]
+            </span>
+            {sourceNote && (
+              <span className="text-[7px] text-zinc-600 leading-tight">{sourceNote}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -294,7 +325,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Hanger Type"
               value={overrides.style}
               onChange={(v) => set('style', v)}
-              source="filter by mount type"
+              sourceType="default"
+              sourceNote="filter by mount type"
               options={[
                 { value: 0, label: 'All Types' },
                 { value: 1, label: 'Face Mount' },
@@ -306,7 +338,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Fastener Type"
               value={overrides.fastenerType}
               onChange={(v) => set('fastenerType', v)}
-              source="filter by fastener"
+              sourceType="default"
+              sourceNote="filter by fastener"
               options={[
                 { value: 0, label: 'All' },
                 { value: 1, label: 'Nails' },
@@ -314,12 +347,13 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 { value: 3, label: 'Screws' },
               ]}
             />
-            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} source="default (IRC 2018)" />
+            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote="IRC 2018" />
             <SelectRow
               label="Download Duration"
               value={overrides.downloadDurationType}
               onChange={(v) => set('downloadDurationType', v)}
-              source="load duration factor"
+              sourceType="default"
+              sourceNote="load duration factor"
               options={[
                 { value: 90, label: 'Dead (90)' },
                 { value: 100, label: 'Floor (100)' },
@@ -332,7 +366,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Uplift Duration"
               value={overrides.upliftLoadDurationType}
               onChange={(v) => set('upliftLoadDurationType', v)}
-              source="uplift duration factor"
+              sourceType="default"
+              sourceNote="uplift duration factor"
               options={[
                 { value: 100, label: 'Normal (100)' },
                 { value: 160, label: 'Wind/Quake (160)' },
@@ -343,7 +378,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 label="ANSI/TPI 1 Evaluation"
                 value={overrides.ansitpi}
                 onChange={(v) => set('ansitpi', v)}
-                source="truss connection type"
+                sourceType="default"
+                sourceNote="truss connection type"
                 options={[
                   { value: 0, label: 'Off' },
                   { value: 3, label: 'On (End Connection)' },
@@ -351,7 +387,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
-            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} source="girder + carried label" />
+            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} sourceType="tre" sourceNote="girder + carried label" />
           </div>
         )}
 
@@ -364,17 +400,17 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.carrying && (
           <div className="py-1">
-            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} source="girder = Truss type" />
-            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} source={`actual: ${cm.width}"`} />
-            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} source={`actual: ${cm.depth}"`} />
-            <Row label="Number of Plies" value={String(cm.ply)} source="default: 1" />
+            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
+            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
+            <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web at connection'} />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} source={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType={cm.kingWidth > 0 ? 'computed' : 'unknown'} sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} source="girder label" />
+            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
           </div>
         )}
 
@@ -387,17 +423,17 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.carried && (
           <div className="py-1">
-            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} source="carried = Truss type" />
-            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} source={`actual: ${cd.width}"`} />
+            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
-              <Row label="Heel Height" value={`${cd.depth}"`} source="from TRE heel at bearing side" />
+              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
             ) : (
-              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
+              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
-            <Row label="Number of Plies" value={String(cd.ply)} source="default: 1" />
-            <Row label="Member ID" value={carriedLabel} source="carried label" />
-            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
-            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
+            <Row label="Number of Plies" value={String(cd.ply)} sourceType="default" sourceNote="not in TRE" />
+            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
+            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
+            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
         )}
 

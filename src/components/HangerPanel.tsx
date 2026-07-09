@@ -306,24 +306,42 @@ function SectionHeader({
 }
 
 /** Single key-value row */
-function Row({ label, value, highlight, source }: {
+type SourceType = 'tre' | 'computed' | 'default' | 'unknown';
+
+const SOURCE_META: Record<SourceType, { label: string; color: string }> = {
+  tre:      { label: 'TRE/IFC',  color: 'text-emerald-500' },
+  computed: { label: 'computed', color: 'text-amber-400'   },
+  default:  { label: 'default',  color: 'text-zinc-500'    },
+  unknown:  { label: 'unknown',  color: 'text-rose-400'    },
+};
+
+function Row({ label, value, highlight, sourceType, sourceNote }: {
   label: string;
   value: string;
   highlight?: 'down' | 'up';
-  source?: string;
+  sourceType?: SourceType;
+  sourceNote?: string;
 }) {
   const valueColor = highlight === 'down'
     ? 'text-[#FFB74D]'
     : highlight === 'up'
       ? 'text-sky-400'
       : 'text-zinc-200';
+  const meta = sourceType ? SOURCE_META[sourceType] : null;
   return (
     <div className="flex justify-between items-start py-0.5">
       <span className="text-zinc-500 text-[9px]">{label}</span>
       <div className="text-right">
         <span className={cn('font-bold text-[9px]', valueColor)}>{value}</span>
-        {source && (
-          <div className="text-[7px] text-zinc-600 leading-tight">{source}</div>
+        {meta && (
+          <div className="flex items-center justify-end gap-1 mt-0.5">
+            <span className={cn('text-[7px] font-semibold uppercase tracking-wide', meta.color)}>
+              [{meta.label}]
+            </span>
+            {sourceNote && (
+              <span className="text-[7px] text-zinc-600 leading-tight">{sourceNote}</span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -414,15 +432,15 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         />
         {sections.job && (
           <div className="py-1.5 pl-1 space-y-0.5">
-            <Row label="Hanger Type" value={STYLE_LABELS[payload.style] ?? String(payload.style)} source="default: All Types" />
-            <Row label="Fastener Type" value={FASTENER_LABELS[payload.fastenerType] ?? String(payload.fastenerType)} source="default: All" />
-            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} source="default: IRC 2018" />
-            <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} source="mapped from truss type" />
-            <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} source="default: Wind/Quake" />
+            <Row label="Hanger Type" value={STYLE_LABELS[payload.style] ?? String(payload.style)} sourceType="default" sourceNote="filter by mount type" />
+            <Row label="Fastener Type" value={FASTENER_LABELS[payload.fastenerType] ?? String(payload.fastenerType)} sourceType="default" sourceNote="filter by fastener" />
+            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote="IRC 2018" />
+            <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} sourceType="default" sourceNote="load duration factor" />
+            <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} sourceType="default" sourceNote="uplift duration factor" />
             {isTruss && (
-              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
+              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} sourceType="default" sourceNote="truss connection type" />
             )}
-            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} source="girder + carried label" />
+            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} sourceType="tre" sourceNote="girder + carried label" />
           </div>
         )}
 
@@ -435,17 +453,17 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         />
         {sections.carrying && (
           <div className="py-1.5 pl-1 space-y-0.5">
-            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} source="girder = Truss type" />
-            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} source={`actual: ${cm.width}"`} />
-            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} source={`actual: ${cm.depth}"`} />
-            <Row label="Number of Plies" value={String(cm.ply)} source="default: 1" />
+            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
+            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
+            <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web at connection'} />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} source={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType={cm.kingWidth > 0 ? 'computed' : 'unknown'} sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} source="girder label" />
+            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
             {!isTruss && (
               <Row label="Top Chord" value={cm.topChord === 1 ? 'Single' : cm.topChord === 2 ? 'Double' : 'N/A'} />
             )}
@@ -461,17 +479,17 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         />
         {sections.carried && (
           <div className="py-1.5 pl-1 space-y-0.5">
-            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} source="carried = Truss type" />
-            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} source={`actual: ${cd.width}"`} />
+            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
-              <Row label="Heel Height" value={`${cd.depth}"`} source="from TRE heel at bearing side" />
+              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
             ) : (
-              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
+              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
-            <Row label="Number of Plies" value={String(cd.ply)} source="default: 1" />
-            <Row label="Member ID" value={carriedLabel} source="carried label" />
-            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
-            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
+            <Row label="Number of Plies" value={String(cd.ply)} sourceType="default" sourceNote="not in TRE" />
+            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
+            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
+            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
         )}
 
