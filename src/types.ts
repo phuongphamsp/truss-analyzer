@@ -24,6 +24,14 @@ export interface TreData {
     coords: Array<{ x: number, y: number }>;
     isStructural: boolean;
   }>;
+  /** Members parsed from [ADDITIONAL CUTTING INFO] — authoritative source for grade/size */
+  cuttingMembers?: Array<{
+    name: string;
+    type: 'TopChord' | 'BottomChord' | 'Web' | 'Other';
+    size: string;
+    grade: string;
+    species: string;
+  }>;
   span?: number;
   pitch?: number;
   spacing?: number;

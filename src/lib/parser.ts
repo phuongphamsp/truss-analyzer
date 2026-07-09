@@ -520,6 +520,115 @@ function parseMembers(lines: string[], startIndex: number, count: number): TreMe
   return members;
 }
 
+/**
+ * Parse [ADDITIONAL CUTTING INFO] section — authoritative source for member grade/size.
+ * Format per line: qty,qty,qty,qty,NAME,size,grade,species,...
+ * Special case for W2 (doubled): qty,qty,qty,qty,W2, W2,size,grade,species,...
+ */
+function parseCuttingInfo(text: string): Array<{
+  name: string;
+  type: 'TopChord' | 'BottomChord' | 'Web' | 'Other';
+  size: string;
+  grade: string;
+  species: string;
+}> {
+  const results: Array<{ name: string; type: 'TopChord' | 'BottomChord' | 'Web' | 'Other'; size: string; grade: string; species: string }> = [];
+  const lines = text.split('\n');
+  let inSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === '[ADDITIONAL CUTTING INFO]') {
+      inSection = true;
+      continue;
+    }
+    if (inSection && trimmed.startsWith('[')) break; // next section
+    if (!inSection) continue;
+    if (!trimmed || trimmed.startsWith('Number')) continue;
+
+    // Split by comma
+    const parts = trimmed.split(',').map(p => p.trim());
+    if (parts.length < 8) continue;
+
+    // Detect doubled member (e.g. "W2, W2" occupies parts[4] and parts[5])
+    // Normal:  [0]=qty [1]=qty [2]=qty [3]=qty [4]=NAME [5]=size [6]=grade [7]=species
+    // Doubled: [0]=qty [1]=qty [2]=qty [3]=qty [4]=NAME [5]=NAME [6]=size  [7]=grade [8]=species
+    let name: string;
+    let size: string;
+    let grade: string;
+    let species: string;
+
+    const p4 = parts[4];
+    const p5 = parts[5];
+    // If p4 and p5 look like the same member name (non-numeric, non-dimension)
+    if (p4 && p5 && !/^\d/.test(p5) && !p5.includes('x') && p4.toUpperCase() === p5.toUpperCase()) {
+      // doubled member
+      name = p4;
+      size = parts[6] || '';
+      grade = parts[7] || '';
+      species = parts[8] || '';
+    } else {
+      name = p4;
+      size = p5 || '';
+      grade = parts[6] || '';
+      species = parts[7] || '';
+    }
+
+    if (!name || !size) continue;
+
+    const upper = name.toUpperCase();
+    let type: 'TopChord' | 'BottomChord' | 'Web' | 'Other' = 'Other';
+    if (upper.startsWith('T') && !upper.startsWith('TH')) type = 'TopChord';
+    else if (upper.startsWith('B') && !upper.startsWith('BR')) type = 'BottomChord';
+    else if (upper.startsWith('W')) type = 'Web';
+
+    results.push({ name, type, size, grade, species });
+  }
+
+  return results;
+}
+
+/**
+ * Given a list of cutting members of the same type, compute:
+ * - majority spec (size + grade + species)
+ * - exceptions (members that differ from majority)
+ * Returns { majority, exceptions: [{name, spec}] }
+ */
+function computeMajoritySpec(members: Array<{ name: string; size: string; grade: string; species: string }>): {
+  majority: string;
+  exceptions: Array<{ name: string; spec: string }>;
+} {
+  if (members.length === 0) return { majority: '', exceptions: [] };
+
+  // Count occurrences of each spec
+  const specCount = new Map<string, number>();
+  for (const m of members) {
+    const spec = `${m.size} ${m.grade} ${m.species}`;
+    specCount.set(spec, (specCount.get(spec) || 0) + 1);
+  }
+
+  // Find majority spec (most common)
+  let majority = '';
+  let maxCount = 0;
+  for (const [spec, count] of specCount) {
+    if (count > maxCount) {
+      maxCount = count;
+      majority = spec;
+    }
+  }
+
+  // Find exceptions
+  const exceptions: Array<{ name: string; spec: string }> = [];
+  for (const m of members) {
+    const spec = `${m.size} ${m.grade} ${m.species}`;
+    if (spec !== majority) {
+      exceptions.push({ name: m.name, spec });
+    }
+  }
+
+  return { majority, exceptions };
+}
+
 function parseDOL(text: string): number | null {
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -724,14 +833,42 @@ function parseTre(text: string, filename: string): TreData | null {
   const spM = text.match(/^Spacing\s*=\s*([\d.]+)/mi);
   if (spM) spacing = parseFloat(spM[1]);
 
-  // Derive top chord, bottom chord, webs materials
-  const topChords = members.filter(m => m.type === 'TopChord');
-  const bottomChords = members.filter(m => m.type === 'BottomChord');
-  const webs = members.filter(m => m.type === 'Web');
+  // Parse [ADDITIONAL CUTTING INFO] — authoritative source for grade/size
+  const cuttingMembers = parseCuttingInfo(text);
 
-  const topChord = topChords.length > 0 ? `${topChords[0].size} ${topChords[0].grade} ${topChords[0].species}` : "2x4 No.2 SP";
-  const bottomChord = bottomChords.length > 0 ? `${bottomChords[0].size} ${bottomChords[0].grade} ${bottomChords[0].species}` : "2x4 No.2 SP";
-  const websMat = webs.length > 0 ? `${webs[0].size} ${webs[0].grade} ${webs[0].species}` : "2x4 No.3 SP";
+  // Derive top chord, bottom chord, webs materials
+  // Prefer [ADDITIONAL CUTTING INFO]; fall back to MEMBER INFO
+  let topChord: string;
+  let bottomChord: string;
+  let websMat: string;
+
+  const cutTopChords = cuttingMembers.filter(m => m.type === 'TopChord');
+  const cutBottomChords = cuttingMembers.filter(m => m.type === 'BottomChord');
+  const cutWebs = cuttingMembers.filter(m => m.type === 'Web');
+
+  if (cutTopChords.length > 0) {
+    const { majority } = computeMajoritySpec(cutTopChords);
+    topChord = majority;
+  } else {
+    const topChords = members.filter(m => m.type === 'TopChord');
+    topChord = topChords.length > 0 ? `${topChords[0].size} ${topChords[0].grade} ${topChords[0].species}` : "2x4 No.2 SP";
+  }
+
+  if (cutBottomChords.length > 0) {
+    const { majority } = computeMajoritySpec(cutBottomChords);
+    bottomChord = majority;
+  } else {
+    const bottomChords = members.filter(m => m.type === 'BottomChord');
+    bottomChord = bottomChords.length > 0 ? `${bottomChords[0].size} ${bottomChords[0].grade} ${bottomChords[0].species}` : "2x4 No.2 SP";
+  }
+
+  if (cutWebs.length > 0) {
+    const { majority } = computeMajoritySpec(cutWebs);
+    websMat = majority;
+  } else {
+    const webs = members.filter(m => m.type === 'Web');
+    websMat = webs.length > 0 ? `${webs[0].size} ${webs[0].grade} ${webs[0].species}` : "2x4 No.3 SP";
+  }
 
   const maxReaction = Math.max(reactions.leftDown, reactions.rightDown);
   const dol = parseDOL(text);
@@ -782,6 +919,7 @@ function parseTre(text: string, filename: string): TreData | null {
     maxReaction,
     reactions,
     members,
+    cuttingMembers,
     span,
     pitch,
     spacing,

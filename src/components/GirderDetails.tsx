@@ -53,6 +53,17 @@ export function GirderDetails({ group }: GirderDetailsProps) {
     const bottomChordMaterial = group.girder.ifcBottomChord || group.girder.treData?.bottomChord || selectedCarried?.treData?.bottomChord || "B1/B2 2x6 2400F SP";
     const websMaterial = group.girder.ifcWebs || group.girder.treData?.webs || selectedCarried?.treData?.webs || "2x4 No.3 SP";
 
+    // Compute *Except* exceptions from [ADDITIONAL CUTTING INFO]
+    const cuttingMembers = group.girder.treData?.cuttingMembers ?? [];
+    function getExceptions(type: 'TopChord' | 'BottomChord' | 'Web', majoritySpec: string) {
+        return cuttingMembers
+            .filter(m => m.type === type)
+            .filter(m => `${m.size} ${m.grade} ${m.species}` !== majoritySpec);
+    }
+    const tcExceptions = getExceptions('TopChord', topChordMaterial);
+    const bcExceptions = getExceptions('BottomChord', bottomChordMaterial);
+    const webExceptions = getExceptions('Web', websMaterial);
+
     // Reactions & Engineering metrics
     const downwardReaction = selectedCarried?.downReaction ?? selectedCarried?.treData?.maxReaction ?? 0;
     const upliftReaction = selectedCarried?.upliftReaction ?? 0;
@@ -280,6 +291,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <span>TC 2x4</span>
                                         <span>{topChordMaterial}</span>
                                     </div>
+                                    {tcExceptions.length > 0 && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {tcExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#FF6B6B]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-[8px] uppercase text-zinc-400 mb-0.5">Bottom Chord Spec</div>
@@ -289,10 +310,13 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                                 const xs = m.coords.map(c => c.x);
                                                 const minX = xs.length > 0 ? Math.round(Math.min(...xs)) : 0;
                                                 const maxX = xs.length > 0 ? Math.round(Math.max(...xs)) : span;
+                                                // Find authoritative grade from cuttingMembers
+                                                const cut = cuttingMembers.find(c => c.name.toUpperCase() === m.name.toUpperCase() && c.type === 'BottomChord');
+                                                const specStr = cut ? `${cut.size} ${cut.grade} ${cut.species}` : `${m.size} ${m.grade} ${m.species}`;
                                                 return (
                                                     <div key={idx} className="flex justify-between border-b border-[#2D313F]/60 pb-1">
                                                         <span className="font-semibold">{m.name} ({minX}" - {maxX}")</span>
-                                                        <span className="font-bold">{m.size} {m.grade} {m.species}</span>
+                                                        <span className="font-bold">{specStr}</span>
                                                     </div>
                                                 );
                                             })
@@ -309,6 +333,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                             </>
                                         )}
                                     </div>
+                                    {bcExceptions.length > 0 && !(group.girder.treData?.members && group.girder.treData.members.filter(m => m.type === 'BottomChord').length > 0) && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {bcExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#4FC3F7]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-[8px] uppercase text-zinc-400 mb-0.5">Truss Webs Spec</div>
@@ -316,6 +350,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <span>WEB 2x4</span>
                                         <span>{websMaterial}</span>
                                     </div>
+                                    {webExceptions.length > 0 && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {webExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#81C784]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
