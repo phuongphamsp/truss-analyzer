@@ -422,6 +422,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
             {isTruss && (
               <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
             )}
+            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} source="girder + carried label" />
           </div>
         )}
 
@@ -444,6 +445,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
                 <Row label="Total Height" value={`${cm.kingHeight}"`} source="from girder heel height" />
               </>
             )}
+            <Row label="Member ID" value={girderLabel} source="girder label" />
             {!isTruss && (
               <Row label="Top Chord" value={cm.topChord === 1 ? 'Single' : cm.topChord === 2 ? 'Double' : 'N/A'} />
             )}
@@ -467,6 +469,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
             )}
             <Row label="Number of Plies" value={String(cd.ply)} source="default: 1" />
+            <Row label="Member ID" value={carriedLabel} source="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
           </div>

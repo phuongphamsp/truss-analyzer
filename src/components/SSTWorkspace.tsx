@@ -351,6 +351,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
+            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} source="girder + carried label" />
           </div>
         )}
 
@@ -373,6 +374,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <Row label="Total Height" value={`${cm.kingHeight}"`} source="from girder heel height" />
               </>
             )}
+            <Row label="Member ID" value={girderLabel} source="girder label" />
           </div>
         )}
 
@@ -393,6 +395,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
             )}
             <Row label="Number of Plies" value={String(cd.ply)} source="default: 1" />
+            <Row label="Member ID" value={carriedLabel} source="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
           </div>
