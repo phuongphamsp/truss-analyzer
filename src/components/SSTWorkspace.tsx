@@ -370,8 +370,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             <Row label="Number of Plies" value={String(cm.ply)} source="default: 1" />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source="not in TRE" />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} source="from girder heel height" />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web at connection'} />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} source={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
             <Row label="Member ID" value={girderLabel} source="girder label" />
