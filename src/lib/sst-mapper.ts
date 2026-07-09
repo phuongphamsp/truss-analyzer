@@ -120,7 +120,8 @@ function findKingPost(
 function getCarriedDepth(carried: CarriedTruss): number {
   const tre = carried.treData;
   if (!tre) return 3.5;
-  // Always use Right Heel Height as the authoritative source per TRE spec
+  // Use heel height matching the bearing side (left/right)
+  if (carried.bearingSide === 'left') return tre.leftHeel ?? tre.rightHeel ?? 3.5;
   return tre.rightHeel ?? tre.leftHeel ?? 3.5;
 }
 
