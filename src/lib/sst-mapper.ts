@@ -57,6 +57,62 @@ function findBottomChord(members: TreData['members']): MemberDims | null {
   return { width: best.width, depth: best.depth };
 }
 
+interface KingPostResult {
+  hasKingPost: boolean;
+  kingWidth: number;   // lumber thickness of the vertical web (e.g. 1.5" for 2x4)
+  kingHeight: number;  // vertical height of the king post segment (yMax - yMin)
+}
+
+/**
+ * Detect whether a vertical web (king post) exists at the connection point
+ * of a carried truss on the girder.
+ *
+ * Strategy:
+ * - connectionX = localX of the carried truss on the girder
+ * - For each Web member in the girder's MEMBER INFO, scan consecutive coord pairs
+ *   looking for a segment where |x1 - x2| < TOLERANCE (nearly vertical)
+ *   AND the segment's x is within TOLERANCE of connectionX
+ * - If found, kingWidth = member.width, kingHeight = |y2 - y1| of that segment
+ */
+function findKingPost(
+  members: TreData['members'],
+  connectionX: number
+): KingPostResult {
+  const TOLERANCE = 2.0; // inches — snap tolerance for "same x"
+
+  if (!members || members.length === 0) {
+    return { hasKingPost: false, kingWidth: 0, kingHeight: 0 };
+  }
+
+  const webMembers = members.filter(m => m.type === 'Web' && m.isStructural);
+
+  for (const web of webMembers) {
+    const coords = web.coords;
+    if (coords.length < 2) continue;
+
+    for (let i = 0; i < coords.length - 1; i++) {
+      const x1 = coords[i].x;
+      const y1 = coords[i].y;
+      const x2 = coords[i + 1].x;
+      const y2 = coords[i + 1].y;
+
+      const isVertical = Math.abs(x1 - x2) < TOLERANCE;
+      const atConnection = Math.abs(x1 - connectionX) < TOLERANCE;
+      const hasHeight = Math.abs(y2 - y1) > 0.5; // meaningful vertical extent
+
+      if (isVertical && atConnection && hasHeight) {
+        return {
+          hasKingPost: true,
+          kingWidth: web.width,
+          kingHeight: Math.abs(y2 - y1),
+        };
+      }
+    }
+  }
+
+  return { hasKingPost: false, kingWidth: 0, kingHeight: 0 };
+}
+
 /**
  * Get heel height at the bearing side of a carried truss.
  * Falls back to the other side, then to 3.5" (2x4 depth).
@@ -91,11 +147,19 @@ export function buildSSTPayload(
   const girderWidth = girderBC?.width ?? 1.5;
   const girderDepth = girderBC?.depth ?? 5.5;
 
-  // kingHeight = overall girder height at the connection point.
-  // Best approximation: girder heel height (left side, since girders are
-  // typically symmetric). Must be >= carrying depth. SST UI defaults to 24.0.
+  // Detect king post (vertical web) at the connection point of this carried truss.
+  // connectionX = localX of the carried truss along the girder span.
+  const kingPost = findKingPost(
+    group.girder.treData?.members,
+    carried.localX
+  );
+
+  // kingHeight: use actual vertical segment height if king post found,
+  // otherwise fall back to girder heel height (floor 24.0" per SST default).
   const girderHeel = group.girder.treData?.leftHeel ?? 0;
-  const kingHeight = Math.max(girderHeel, girderDepth, 24.0);
+  const kingHeight = kingPost.hasKingPost
+    ? kingPost.kingHeight
+    : Math.max(girderHeel, girderDepth, 24.0);
 
   const carryingMember: SSTCarryingMember = {
     material: MATERIAL_TRUSS,
@@ -104,7 +168,7 @@ export function buildSSTPayload(
     ply: 1,
     topChord: 0,
     topChordPly: 0,
-    kingWidth: 0,
+    kingWidth: kingPost.hasKingPost ? kingPost.kingWidth : 0,
     kingHeight,
   };
 
