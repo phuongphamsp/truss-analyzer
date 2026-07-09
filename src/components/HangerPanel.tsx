@@ -420,7 +420,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
             <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} source="mapped from truss type" />
             <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} source="default: Wind/Quake" />
             {isTruss && (
-              <Row label="ANSI/TPI" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
+              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} source="truss connection" />
             )}
           </div>
         )}
@@ -434,13 +434,13 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         />
         {sections.carrying && (
           <div className="py-1.5 pl-1 space-y-0.5">
-            <Row label="Material" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} source="girder = Truss type" />
-            <Row label="Width" value={widthToNominal(cm.width)} source={`actual: ${cm.width}"`} />
-            <Row label="Depth" value={depthToNominal(cm.depth)} source={`actual: ${cm.depth}"`} />
-            <Row label="Ply" value={String(cm.ply)} source="default: 1" />
+            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} source="girder = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} source={`actual: ${cm.width}"`} />
+            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} source={`actual: ${cm.depth}"`} />
+            <Row label="Number of Plies" value={String(cm.ply)} source="default: 1" />
             {isTruss && (
               <>
-                <Row label="King Width" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source="not available in TRE" />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} source="not available in TRE" />
                 <Row label="Total Height" value={`${cm.kingHeight}"`} source="from girder heel height" />
               </>
             )}
@@ -459,16 +459,16 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         />
         {sections.carried && (
           <div className="py-1.5 pl-1 space-y-0.5">
-            <Row label="Material" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} source="carried = Truss type" />
-            <Row label="Width" value={widthToNominal(cd.width)} source={`actual: ${cd.width}"`} />
+            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} source="carried = Truss type" />
+            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} source={`actual: ${cd.width}"`} />
             {isTruss ? (
               <Row label="Heel Height" value={`${cd.depth}"`} source="from TRE heel at bearing side" />
             ) : (
-              <Row label="Depth" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
+              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} source={`actual: ${cd.depth}"`} />
             )}
-            <Row label="Ply" value={String(cd.ply)} source="default: 1" />
-            <Row label="Download Load" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
-            <Row label="Uplift Load" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
+            <Row label="Number of Plies" value={String(cd.ply)} source="default: 1" />
+            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" source="from enrichCarriedTrusses()" />
+            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" source="from enrichCarriedTrusses()" />
           </div>
         )}
 
