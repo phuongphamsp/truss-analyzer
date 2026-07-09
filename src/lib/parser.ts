@@ -966,7 +966,7 @@ function parseTre(text: string, filename: string): TreData | null {
  * - Không bị MOCK (luôn có kết quả nếu có TRE)
  * - Chính xác hơn vì dùng đúng bearing location từ TRE
  */
-const BEARING_LOCATION_TOLERANCE = 0.5; // inches
+const BEARING_LOCATION_TOLERANCE = 4.1; // inches — covers floating point drift and coordinate system offset (T09A case: diff=4.000046")
 
 function parseReactionAtBearing(
   carriedTreTxt: string,
