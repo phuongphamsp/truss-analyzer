@@ -971,7 +971,7 @@ const BEARING_LOCATION_TOLERANCE = 0.5; // inches
 function parseReactionAtBearing(
   carriedTreTxt: string,
   targetBearing: number
-): { downReaction: number; upliftReaction: number } | null {
+): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right' } | null {
   const lines = carriedTreTxt.split('\n');
 
   // Tìm REACTION INFO section
@@ -985,6 +985,7 @@ function parseReactionAtBearing(
   i++; // bỏ qua count line
 
   const values: number[] = [];
+  let resolvedBearingSide: 'left' | 'right' | null = null;
 
   while (i < lines.length) {
     const line = lines[i].trim();
@@ -995,13 +996,18 @@ function parseReactionAtBearing(
     const hp = line.split(/\s+/);
     if (hp.length < 7) { i++; continue; }
 
-    const bearingA = parseFloat(hp[5]); // e.g. 0.000000
-    const bearingB = parseFloat(hp[6]); // e.g. 71.187500
+    const bearingA = parseFloat(hp[5]); // smaller coord → LEFT end
+    const bearingB = parseFloat(hp[6]); // larger coord  → RIGHT end
 
     // Xác định targetBearing khớp với bearing nào
     const matchA = Math.abs(bearingA - targetBearing) <= BEARING_LOCATION_TOLERANCE;
     const matchB = Math.abs(bearingB - targetBearing) <= BEARING_LOCATION_TOLERANCE;
     if (!matchA && !matchB) { i++; continue; }
+
+    // bearingA = left end (x≈0), bearingB = right end (x≈span)
+    if (resolvedBearingSide === null) {
+      resolvedBearingSide = matchA ? 'left' : 'right';
+    }
 
     const matchedBearing = matchA ? bearingA : bearingB;
 
@@ -1042,6 +1048,7 @@ function parseReactionAtBearing(
   return {
     downReaction:   Math.max(...values),
     upliftReaction: Math.min(...values),
+    bearingSide:    resolvedBearingSide ?? 'left',
   };
 }
 
@@ -1086,7 +1093,7 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
       if (result) {
         c.downReaction   = result.downReaction;
         c.upliftReaction = result.upliftReaction;
-        c.bearingSide    = undefined; // không cần left/right với phương pháp này
+        c.bearingSide    = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
         return;
       }
     }
