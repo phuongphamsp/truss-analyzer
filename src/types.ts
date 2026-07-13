@@ -36,6 +36,7 @@ export interface TreData {
   pitch?: number;
   spacing?: number;
   dol?: number | null;
+  ply?: number;         // Ply= field from [ADDITIONAL TRUSS INFO]
   csi?: number;
   leftHeel?: number;
   rightHeel?: number;

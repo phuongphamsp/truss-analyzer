@@ -194,11 +194,14 @@ export function buildSSTPayload(
     ? kingPost.kingHeight
     : Math.max(girderHeel, girderDepth, 24.0);
 
+  // Ply from [ADDITIONAL TRUSS INFO] Ply= field; default 1 if not found
+  const girderPly = group.girder.treData?.ply ?? 1;
+
   const carryingMember: SSTCarryingMember = {
     material: MATERIAL_TRUSS,
     width: girderWidth,
     depth: girderDepth,
-    ply: 1,
+    ply: girderPly,
     topChord: 0,
     topChordPly: 0,
     kingWidth: kingPost.hasKingPost ? kingPost.kingWidth : 0,

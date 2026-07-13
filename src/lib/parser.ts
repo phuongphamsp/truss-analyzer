@@ -911,6 +911,11 @@ function parseTre(text: string, filename: string): TreData | null {
   const csiM = text.match(/CSI\s*=\s*([\d.]+)/i) || text.match(/Max\s+CSI\s*=\s*([\d.]+)/i) || text.match(/Stress\s+Ratio\s*=\s*([\d.]+)/i);
   if (csiM) csi = parseFloat(csiM[1]);
 
+  // Ply= from [ADDITIONAL TRUSS INFO]
+  let ply: number | undefined = undefined;
+  const plyM = text.match(/^Ply\s*=\s*(\d+)/mi);
+  if (plyM) ply = parseInt(plyM[1], 10);
+
   return {
     label,
     isGirder,
@@ -925,6 +930,7 @@ function parseTre(text: string, filename: string): TreData | null {
     pitch,
     spacing,
     dol,
+    ply,
     hangers,
     leftHeel,
     rightHeel,

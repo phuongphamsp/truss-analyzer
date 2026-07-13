@@ -204,7 +204,7 @@ function SelectRow<T extends number>({
   );
 }
 
-function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange, overrides, onOverridesChange, carried }: {
+function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange, overrides, onOverridesChange, carried, group }: {
   payload: SSTPayload;
   girderLabel: string;
   carriedLabel: string;
@@ -213,6 +213,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   overrides: JobOverrides;
   onOverridesChange: (o: JobOverrides) => void;
   carried: CarriedTruss;
+  group: GirderGroup;
 }) {
   const [sections, setSections] = useState({
     connection: true,
@@ -408,7 +409,14 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
-            <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
+            <Row
+              label="Number of Plies"
+              value={String(cm.ply)}
+              sourceType={group.girder.treData?.ply != null ? 'tre' : 'default'}
+              sourceNote={group.girder.treData?.ply != null
+                ? `Ply=${group.girder.treData.ply} from [ADDITIONAL TRUSS INFO]`
+                : 'not in TRE'}
+            />
             {isTruss && (
               <>
                 <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
@@ -1082,6 +1090,7 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
             overrides={overrides}
             onOverridesChange={setOverrides}
             carried={selectedCarried}
+            group={group}
           />
         </div>
       )}
