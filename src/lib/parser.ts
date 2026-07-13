@@ -653,7 +653,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number }> = [];
+  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -667,10 +667,11 @@ function parseHangers(text: string) {
       const parts = trimmed.split('=')[1]?.trim().split(/\s+/);
       if (parts && parts.length > 6) {
         const xInches = parseFloat(parts[2]);
-        // bearingLocation is at field index 16 (0-based) of the value after '='
-        // e.g. LG0T=0 1 30.0001 0 J06C 1.5 17.1006 9 2 1 0 0 0 0 90 0 71.1875 ...
-        //       [0][1]  [2]    [3] [4]  [5]  [6]   [7][8][9]...          [16]
+        // LG*T field layout (0-based after '='):
+        // [0]=flag [1]=flag [2]=xInches [3]=flag [4]=label [5]=width [6]=heelHeight
+        // [7..13]=flags [14]=angle [15]=flag [16]=bearingLocation ...
         const bearingLocation = parts.length > 16 ? parseFloat(parts[16]) : 0;
+        const angle           = parts.length > 14 ? parseFloat(parts[14]) : 90;
         if (!isNaN(xInches)) {
           hangers.push({
             xFeet: xInches / 12,
@@ -678,7 +679,8 @@ function parseHangers(text: string) {
             label: parts[4],
             width: parseFloat(parts[5]) || 0,
             heelHeight: parseFloat(parts[6]) || 0,
-            bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation
+            bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation,
+            angle: isNaN(angle) ? 90 : angle,
           });
         }
       }
@@ -1230,7 +1232,8 @@ function computeCarriedTrussGeometry(girder: TrussInstance, carriedInstances: Tr
         member,
         memberSize,
         treData,
-        spacing: null
+        spacing: null,
+        hangerAngle: h.angle,  // LG*T field[14]: angle of carried truss relative to girder
       });
     }
   } else {
