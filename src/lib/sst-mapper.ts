@@ -94,7 +94,7 @@ function findBottomChord(members: TreData['members']): MemberDims | null {
 
 interface KingPostResult {
   hasKingPost: boolean;
-  kingWidth: number;   // lumber thickness of the vertical web (e.g. 1.5" for 2x4)
+  kingWidth: number;   // face width of the vertical web toward the hanger = lumber depth (e.g. 3.5" for 2x4)
   kingHeight: number;  // vertical height of the king post segment (yMax - yMin)
 }
 
@@ -138,7 +138,9 @@ function findKingPost(
       if (isVertical && atConnection && hasHeight) {
         return {
           hasKingPost: true,
-          kingWidth: web.width,
+          // King post stands vertically → face width toward hanger = lumber depth (e.g. 3.5" for 2x4)
+          // web.width = lumber thickness (1.5"), web.depth = lumber depth (3.5")
+          kingWidth: web.depth,
           kingHeight: Math.abs(y2 - y1),
         };
       }
