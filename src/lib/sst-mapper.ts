@@ -217,11 +217,14 @@ export function buildSSTPayload(
   const load = Math.round(Math.abs(carried.downReaction ?? 0));
   const uplift = Math.round(Math.abs(carried.upliftReaction ?? 0));
 
+  // Ply from [ADDITIONAL TRUSS INFO] Ply= field of carried truss; default 1 if not found
+  const carriedPly = carried.treData?.ply ?? 1;
+
   const carriedMember: SSTCarriedMember = {
     material: MATERIAL_TRUSS,
     width: carriedWidth,
     depth: carriedDepth > 0 ? carriedDepth : 3.5,
-    ply: 1,
+    ply: carriedPly,
     loads: { load, uplift },
     angle: {
       skewAngle: 0,

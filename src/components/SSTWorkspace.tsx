@@ -443,7 +443,14 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             ) : (
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
-            <Row label="Number of Plies" value={String(cd.ply)} sourceType="default" sourceNote="not in TRE" />
+            <Row
+              label="Number of Plies"
+              value={String(cd.ply)}
+              sourceType={carried.treData?.ply != null ? 'tre' : 'default'}
+              sourceNote={carried.treData?.ply != null
+                ? `Ply=${carried.treData.ply} from [ADDITIONAL TRUSS INFO]`
+                : 'not in TRE'}
+            />
             <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
