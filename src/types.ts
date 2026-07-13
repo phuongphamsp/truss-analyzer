@@ -91,6 +91,8 @@ export interface CarriedTruss {
   bearingSide?: 'left' | 'right';
   downReaction?: number;
   upliftReaction?: number;
+  downDolFactor?: number;   // DOL factor of the LC that produced downReaction (e.g. 1.15, 1.25)
+  upliftDolFactor?: number; // DOL factor of the LC that produced upliftReaction (e.g. 1.6)
 }
 
 export interface GirderGroup {

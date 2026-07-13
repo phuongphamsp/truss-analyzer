@@ -25,13 +25,48 @@ import {
   FLUSH_BOTTOM,
   SKEW_TYPE_NONE,
   SLOPE_TYPE_NONE,
+  DL_DURATION_DEAD,
+  DL_DURATION_FLOOR,
+  DL_DURATION_SNOW,
   DL_DURATION_ROOF,
+  DL_DURATION_WIND_QUAKE,
+  UL_DURATION_NORMAL,
   UL_DURATION_WIND_QUAKE,
 } from './sst-types';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Map TRE load-case DOL factor → SST download duration type constant.
+ *
+ * TRE DOL factors (from LoadCase definitions):
+ *   0.90 → Dead only
+ *   1.00 → Floor
+ *   1.15 → Snow / Roof Live
+ *   1.25 → Roof Live (uninhabitable attic)
+ *   1.60 → Wind / Seismic
+ *
+ * SST duration constants are factor × 100 (e.g. Roof 125 = 125).
+ */
+function dolFactorToDownloadDuration(dolFactor: number | undefined): number {
+  if (dolFactor === undefined || dolFactor === null) return DL_DURATION_ROOF; // default
+  const f = Math.round(dolFactor * 100); // e.g. 1.15 → 115, 1.60 → 160
+  if (f <= 90)  return DL_DURATION_DEAD;
+  if (f <= 100) return DL_DURATION_FLOOR;
+  if (f <= 115) return DL_DURATION_SNOW;
+  if (f <= 125) return DL_DURATION_ROOF;
+  return DL_DURATION_WIND_QUAKE; // 160
+}
+
+function dolFactorToUpliftDuration(dolFactor: number | undefined): number {
+  if (dolFactor === undefined || dolFactor === null) return UL_DURATION_WIND_QUAKE; // default
+  const f = Math.round(dolFactor * 100);
+  if (f <= 100) return UL_DURATION_NORMAL;
+  return UL_DURATION_WIND_QUAKE; // 160
+}
+
 
 interface MemberDims {
   width: number;
@@ -202,8 +237,8 @@ export function buildSSTPayload(
     sort: 0,
     ledger: 0,
     designInformations: {
-      downloadDurationType: DL_DURATION_ROOF,
-      upliftLoadDurationType: UL_DURATION_WIND_QUAKE,
+      downloadDurationType:   dolFactorToDownloadDuration(carried.downDolFactor),
+      upliftLoadDurationType: dolFactorToUpliftDuration(carried.upliftDolFactor),
     },
     filters: {
       depth: 0,

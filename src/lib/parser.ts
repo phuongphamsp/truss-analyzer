@@ -971,7 +971,7 @@ const BEARING_LOCATION_TOLERANCE = 4.1; // inches — covers floating point drif
 function parseReactionAtBearing(
   carriedTreTxt: string,
   targetBearing: number
-): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right' } | null {
+): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number } | null {
   const lines = carriedTreTxt.split('\n');
 
   // Tìm REACTION INFO section
@@ -984,20 +984,23 @@ function parseReactionAtBearing(
   while (i < lines.length && lines[i].trim() === '') i++;
   i++; // bỏ qua count line
 
-  const values: number[] = [];
+  // Track value + dolFactor per collected entry
+  const entries: Array<{ value: number; dolFactor: number }> = [];
   let resolvedBearingSide: 'left' | 'right' | null = null;
 
   while (i < lines.length) {
     const line = lines[i].trim();
 
-    // Header block: "2 -1 -1 -1 -1 <bearingA> <bearingB> ..."
+    // Header block: "2 -1 -1 -1 -1 <bearingA> <bearingB> ... <dolFactor>"
     if (!line.startsWith('2 -1 -1 -1 -1')) { i++; continue; }
 
     const hp = line.split(/\s+/);
     if (hp.length < 7) { i++; continue; }
 
-    const bearingA = parseFloat(hp[5]); // smaller coord → LEFT end
-    const bearingB = parseFloat(hp[6]); // larger coord  → RIGHT end
+    const bearingA  = parseFloat(hp[5]); // smaller coord → LEFT end
+    const bearingB  = parseFloat(hp[6]); // larger coord  → RIGHT end
+    // dolFactor is the last field of the header line (e.g. 1.150000, 1.600000)
+    const dolFactor = parseFloat(hp[hp.length - 1]);
 
     // Xác định targetBearing khớp với bearing nào
     const matchA = Math.abs(bearingA - targetBearing) <= BEARING_LOCATION_TOLERANCE;
@@ -1036,19 +1039,26 @@ function parseReactionAtBearing(
       const isMatchBearing = Math.abs(bearingLoc - matchedBearing) <= BEARING_LOCATION_TOLERANCE;
 
       if (isTotal && isMatchBearing) {
-        values.push(value);
+        entries.push({ value, dolFactor });
       }
 
       i++;
     }
   }
 
-  if (values.length === 0) return null;
+  if (entries.length === 0) return null;
+
+  // downReaction = max value → pick its dolFactor
+  const downEntry   = entries.reduce((a, b) => b.value > a.value ? b : a);
+  // upliftReaction = min value → pick its dolFactor
+  const upliftEntry = entries.reduce((a, b) => b.value < a.value ? b : a);
 
   return {
-    downReaction:   Math.max(...values),
-    upliftReaction: Math.min(...values),
-    bearingSide:    resolvedBearingSide ?? 'left',
+    downReaction:    downEntry.value,
+    upliftReaction:  upliftEntry.value,
+    bearingSide:     resolvedBearingSide ?? 'left',
+    downDolFactor:   downEntry.dolFactor,
+    upliftDolFactor: upliftEntry.dolFactor,
   };
 }
 
@@ -1091,9 +1101,11 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
     if (hanger && hanger.bearingLocation > 0 && carriedTreTxt) {
       const result = parseReactionAtBearing(carriedTreTxt, hanger.bearingLocation);
       if (result) {
-        c.downReaction   = result.downReaction;
-        c.upliftReaction = result.upliftReaction;
-        c.bearingSide    = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
+        c.downReaction    = result.downReaction;
+        c.upliftReaction  = result.upliftReaction;
+        c.bearingSide     = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
+        c.downDolFactor   = result.downDolFactor;
+        c.upliftDolFactor = result.upliftDolFactor;
         return;
       }
     }
