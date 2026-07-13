@@ -353,7 +353,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Download Duration"
               value={overrides.downloadDurationType}
               onChange={(v) => set('downloadDurationType', v)}
-              sourceType={carried.downDolFactor != null ? 'tre' : 'default'}
+              sourceType={carried.downDolFactor != null ? 'computed' : 'default'}
               sourceNote={carried.downDolFactor != null
                 ? `DOL ${carried.downDolFactor.toFixed(2)} from downReaction LC`
                 : 'load duration factor'}
@@ -369,7 +369,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Uplift Duration"
               value={overrides.upliftLoadDurationType}
               onChange={(v) => set('upliftLoadDurationType', v)}
-              sourceType={carried.upliftDolFactor != null ? 'tre' : 'default'}
+              sourceType={carried.upliftDolFactor != null ? 'computed' : 'default'}
               sourceNote={carried.upliftDolFactor != null
                 ? `DOL ${carried.upliftDolFactor.toFixed(2)} from upliftReaction LC`
                 : 'uplift duration factor'}
