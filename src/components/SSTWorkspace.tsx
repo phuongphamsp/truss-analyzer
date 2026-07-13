@@ -204,7 +204,7 @@ function SelectRow<T extends number>({
   );
 }
 
-function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange, overrides, onOverridesChange }: {
+function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange, overrides, onOverridesChange, carried }: {
   payload: SSTPayload;
   girderLabel: string;
   carriedLabel: string;
@@ -212,6 +212,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   onViewChange: (mode: ViewMode) => void;
   overrides: JobOverrides;
   onOverridesChange: (o: JobOverrides) => void;
+  carried: CarriedTruss;
 }) {
   const [sections, setSections] = useState({
     connection: true,
@@ -352,8 +353,10 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Download Duration"
               value={overrides.downloadDurationType}
               onChange={(v) => set('downloadDurationType', v)}
-              sourceType="default"
-              sourceNote="load duration factor"
+              sourceType={carried.downDolFactor != null ? 'tre' : 'default'}
+              sourceNote={carried.downDolFactor != null
+                ? `DOL ${carried.downDolFactor.toFixed(2)} from downReaction LC`
+                : 'load duration factor'}
               options={[
                 { value: 90, label: 'Dead (90)' },
                 { value: 100, label: 'Floor (100)' },
@@ -366,8 +369,10 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Uplift Duration"
               value={overrides.upliftLoadDurationType}
               onChange={(v) => set('upliftLoadDurationType', v)}
-              sourceType="default"
-              sourceNote="uplift duration factor"
+              sourceType={carried.upliftDolFactor != null ? 'tre' : 'default'}
+              sourceNote={carried.upliftDolFactor != null
+                ? `DOL ${carried.upliftDolFactor.toFixed(2)} from upliftReaction LC`
+                : 'uplift duration factor'}
               options={[
                 { value: 100, label: 'Normal (100)' },
                 { value: 160, label: 'Wind/Quake (160)' },
@@ -1076,6 +1081,7 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
             onViewChange={setViewMode}
             overrides={overrides}
             onOverridesChange={setOverrides}
+            carried={selectedCarried}
           />
         </div>
       )}
