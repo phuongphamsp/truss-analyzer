@@ -190,11 +190,11 @@ export function buildSSTPayload(
   );
 
   // kingHeight: use actual vertical segment height if king post found,
-  // otherwise fall back to girder heel height (floor 24.0" per SST default).
+  // otherwise fall back to girder heel height.
   const girderHeel = group.girder.treData?.leftHeel ?? 0;
   const kingHeight = kingPost.hasKingPost
     ? kingPost.kingHeight
-    : Math.max(girderHeel, girderDepth, 24.0);
+    : Math.max(girderHeel, girderDepth);
 
   // Ply from [ADDITIONAL TRUSS INFO] Ply= field; default 1 if not found
   const girderPly = group.girder.treData?.ply ?? 1;
