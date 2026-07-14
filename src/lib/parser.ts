@@ -1106,7 +1106,7 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
     // --- TRE-based Bearing Detection (primary method) ---
     // Dùng bearingLocation từ LG*T line trong girder TRE để tìm đúng reaction
     // trong REACTION INFO của carried truss TRE.
-    if (hanger && hanger.bearingLocation > 0 && carriedTreTxt) {
+    if (hanger && hanger.bearingLocation >= 0 && carriedTreTxt) {
       const result = parseReactionAtBearing(carriedTreTxt, hanger.bearingLocation);
       if (result) {
         c.downReaction    = result.downReaction;
