@@ -393,7 +393,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
-            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} sourceType="tre" sourceNote="girder + carried label" />
+            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
         )}
 

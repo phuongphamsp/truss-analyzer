@@ -440,7 +440,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
             {isTruss && (
               <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} sourceType="default" sourceNote="truss connection type" />
             )}
-            <Row label="Job ID" value={`${girderLabel} on ${carriedLabel}`} sourceType="tre" sourceNote="girder + carried label" />
+            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
         )}
 
