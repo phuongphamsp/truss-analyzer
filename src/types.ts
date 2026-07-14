@@ -40,6 +40,8 @@ export interface TreData {
   csi?: number;
   leftHeel?: number;
   rightHeel?: number;
+  leftStub?: number;   // Left Stub= field from TRE (inches from left end to left bearing)
+  rightStub?: number;  // Right Stub= field from TRE (inches from right end to right bearing)
   hangers?: Array<{
     xFeet: number;
     xInches: number;

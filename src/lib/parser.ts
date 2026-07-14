@@ -888,6 +888,12 @@ function parseTre(text: string, filename: string): TreData | null {
   const hmR = text.match(/Right\s+Heel\s+Height\s*=\s*([\d.]+)/i) ?? text.match(/HeelHeightRight\s*=\s*([\d.]+)/i);
   if (hmL) leftHeel = parseFloat(hmL[1]);
   if (hmR) rightHeel = parseFloat(hmR[1]);
+
+  // TRE format: "Left Stub=48.0000" / "Right Stub=0.5000"
+  const lsM = text.match(/^Left\s+Stub\s*=\s*([\d.]+)/mi);
+  const rsM = text.match(/^Right\s+Stub\s*=\s*([\d.]+)/mi);
+  const leftStub  = lsM ? parseFloat(lsM[1]) : 0;
+  const rightStub = rsM ? parseFloat(rsM[1]) : 0;
   
   if (!hmL || !hmR) {
     for (let i = 0; i < lines.length; i++) {
@@ -936,6 +942,8 @@ function parseTre(text: string, filename: string): TreData | null {
     hangers,
     leftHeel,
     rightHeel,
+    leftStub,
+    rightStub,
     csi,
     rawText: text
   };
@@ -1106,8 +1114,22 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
     // --- TRE-based Bearing Detection (primary method) ---
     // Dùng bearingLocation từ LG*T line trong girder TRE để tìm đúng reaction
     // trong REACTION INFO của carried truss TRE.
+    //
+    // bearingLocation (field[16] của LG*T) là vị trí bearing tính từ left end của carried truss.
+    // REACTION INFO dùng tọa độ tính từ heel (sau khi trừ stub offset).
+    // Ví dụ: bearingLocation=49.75", Left Stub=48" → tọa độ trong REACTION INFO = 49.75 - 48 = 1.75"
     if (hanger && hanger.bearingLocation >= 0 && carriedTreTxt) {
-      const result = parseReactionAtBearing(carriedTreTxt, hanger.bearingLocation);
+      const carriedTre = c.treData;
+      const leftStub  = carriedTre?.leftStub  ?? 0;
+      const rightStub = carriedTre?.rightStub ?? 0;
+      const span      = carriedTre?.span      ?? 0;
+
+      // Thử adjust theo left stub trước, nếu không match thì thử right stub
+      const adjustedLeft  = hanger.bearingLocation - leftStub;
+      const adjustedRight = span - hanger.bearingLocation - rightStub;
+      const targetBearing = adjustedLeft >= 0 ? adjustedLeft : adjustedRight;
+
+      const result = parseReactionAtBearing(carriedTreTxt, targetBearing);
       if (result) {
         c.downReaction    = result.downReaction;
         c.upliftReaction  = result.upliftReaction;
