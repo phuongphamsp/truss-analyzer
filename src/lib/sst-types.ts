@@ -105,6 +105,10 @@ export interface SSTAngle {
   skewType: number;
   slopeAngle: number;
   slopeType: number;
+  /** Top-flange bend angle (degrees) — follows the connection skew. */
+  topFlangeBend: number;
+  /** Top-flange slope angle (degrees) — follows the carried member slope. */
+  topFlangeSlope: number;
 }
 
 export interface SSTLoads {

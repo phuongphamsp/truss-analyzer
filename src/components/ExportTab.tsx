@@ -45,12 +45,14 @@ export function ExportTab({ girders, onLog }: ExportTabProps) {
            dol: g.girder.treData?.dol,
            carriedTrussesCount: g.carriedTrusses.length,
            maxReaction: g.girder.treData?.maxReaction,
+           lumberSpecies: g.girder.treData?.lumberSpecies,
            rawTreData: g.girder.treData,
            carriedTrusses: g.carriedTrusses.map(c => ({
               label: c.instance.label,
               downReaction: c.downReaction || c.treData?.maxReaction || 0,
               upliftReaction: c.upliftReaction || 0,
-              localX: c.localX
+              localX: c.localX,
+              lumberSpecies: c.treData?.lumberSpecies
            }))
         };
       });

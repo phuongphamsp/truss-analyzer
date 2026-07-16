@@ -18,13 +18,17 @@ import type { GirderGroup, CarriedTruss, TreData } from '../types';
 import type { SSTPayload, SSTCarriedMember, SSTCarryingMember } from './sst-types';
 import {
   MATERIAL_TRUSS,
+  ANSITPI_END,
   ANSITPI_INTERIOR,
   BUILDING_CODE_IRC2018,
   STYLE_ALL,
   FASTENER_ALL,
   FLUSH_BOTTOM,
   SKEW_TYPE_NONE,
+  SKEW_TYPE_LEFT,
+  SKEW_TYPE_RIGHT,
   SLOPE_TYPE_NONE,
+  SLOPE_TYPE_UP,
   DL_DURATION_DEAD,
   DL_DURATION_FLOOR,
   DL_DURATION_SNOW,
@@ -90,6 +94,96 @@ function findBottomChord(members: TreData['members']): MemberDims | null {
     a.width * a.depth >= b.width * b.depth ? a : b
   );
   return { width: best.width, depth: best.depth };
+}
+
+export interface BottomChordSegmentResult {
+  /** Reported bottom-chord width (lumber thickness, inches) at the connection. */
+  width: number;
+  /** Depth (inches) of the same segment. */
+  depth: number;
+  /** True when the bottom-chord segments differ in size (width or depth). */
+  varying: boolean;
+  /** Name of the segment whose width was reported (null if none). */
+  segment: string | null;
+  /** All bottom-chord segments with their x-extents (inches). */
+  segments: Array<{ name: string; width: number; depth: number; xMin: number; xMax: number }>;
+}
+
+/**
+ * Resolve the bottom-chord SEGMENT at a connection (returning its width AND
+ * depth/height), detecting varying chord sizes across segments.
+ *
+ * A truss bottom chord can be split into multiple segments (B1, B2, …), each a
+ * distinct piece of lumber with its own size. The SST payload needs the size
+ * *at the connection point*, not just the largest segment — picking the largest
+ * segment is what caused wrong chord sizes (and wrong BC height) when segments
+ * vary:
+ *   - Carrying member (girder): pass `connectionX` = the carried truss's position
+ *     along the girder (localX). The segment whose x-extent contains that point
+ *     is used; if none contains it, the nearest segment is used.
+ *   - Carried member (truss): pass `bearingSide`. The segment at that end of the
+ *     chord (leftmost for 'left', rightmost for 'right') is used.
+ *
+ * `varying` is true when segments differ in size (width or depth), i.e. the
+ * chord is not uniform along its length.
+ *
+ * @returns width/depth of the selected segment plus the varying flag and breakdown.
+ */
+export function resolveBottomChordSegment(
+  members: TreData['members'],
+  opts: { connectionX?: number; bearingSide?: 'left' | 'right' }
+): BottomChordSegmentResult {
+  const empty: BottomChordSegmentResult = {
+    width: 0, depth: 0, varying: false, segment: null, segments: [],
+  };
+  if (!members || members.length === 0) return empty;
+
+  const bcs = members.filter(
+    (m) => m.type === 'BottomChord' && m.width > 0 && m.depth > 0 && m.coords.length >= 2
+  );
+  if (bcs.length === 0) return empty;
+
+  const segments = bcs.map((m) => {
+    const xs = m.coords.map((c) => c.x);
+    return {
+      name: m.name,
+      width: m.width,
+      depth: m.depth,
+      xMin: Math.min(...xs),
+      xMax: Math.max(...xs),
+    };
+  });
+
+  // Varying = segments differ in size (width or depth).
+  const varying = new Set(segments.map((s) => `${s.width}x${s.depth}`)).size > 1;
+
+  const TOL = 1.0; // inches
+  let chosen = segments[0];
+
+  if (opts.connectionX != null) {
+    const x = opts.connectionX;
+    const containing = segments.find((s) => x >= s.xMin - TOL && x <= s.xMax + TOL);
+    chosen = containing ?? segments.reduce((a, b) => {
+      const da = x < a.xMin ? a.xMin - x : x > a.xMax ? x - a.xMax : 0;
+      const db = x < b.xMin ? b.xMin - x : x > b.xMax ? x - b.xMax : 0;
+      return db < da ? b : a;
+    });
+  } else if (opts.bearingSide === 'right') {
+    chosen = segments.reduce((a, b) => (b.xMax > a.xMax ? b : a));
+  } else if (opts.bearingSide === 'left') {
+    chosen = segments.reduce((a, b) => (b.xMin < a.xMin ? b : a));
+  } else {
+    // Fallback: largest cross-section.
+    chosen = segments.reduce((a, b) => (b.width * b.depth > a.width * a.depth ? b : a));
+  }
+
+  return {
+    width: chosen.width,
+    depth: chosen.depth,
+    varying,
+    segment: chosen.name,
+    segments,
+  };
 }
 
 interface KingPostResult {
@@ -162,6 +256,48 @@ function getCarriedDepth(carried: CarriedTruss): number {
   return tre.rightHeel ?? tre.leftHeel ?? 3.5;
 }
 
+/**
+ * ANSI/TPI 1 Evaluation — connection classification (End vs Interior).
+ *
+ * NOTE: This value is not currently available from IFC extraction; until IFC
+ * extraction is added, it is derived here from the parsed TRE geometry.
+ *
+ * Rule ("5d of chord size"):
+ *   A connection located within 5 × d of a girder end is an END connection;
+ *   otherwise it is an INTERIOR connection. Here `d` is the carried truss
+ *   bottom-chord depth (inches), and the distance is measured from the
+ *   connection point to the nearest *physical* end of the girder (x = 0 or
+ *   x = span), using the same left-end-origin coordinate as `carried.localX`.
+ *
+ * Fallbacks:
+ *   - Missing/invalid girder span → cannot locate ends → default to INTERIOR.
+ *   - Missing carried chord depth → fall back to 3.5" (2x4 chord depth),
+ *     consistent with the other dimension fallbacks in this module.
+ *
+ * @returns ANSITPI_END (3) or ANSITPI_INTERIOR (6)
+ */
+export function computeAnsiTpi(
+  group: GirderGroup,
+  carried: CarriedTruss
+): number {
+  const span = group.girder.treData?.span ?? 0;
+  if (!(span > 0)) return ANSITPI_INTERIOR; // no usable geometry → interior
+
+  // d = carried truss bottom-chord depth (inches).
+  const carriedBC = findBottomChord(carried.treData?.members);
+  const d = carriedBC?.depth ?? 3.5;
+
+  // Connection position along the girder, measured from the left end (inches).
+  // Clamp into [0, span] to tolerate minor coordinate noise.
+  const connectionX = Math.min(Math.max(carried.localX ?? 0, 0), span);
+
+  const distFromLeftEnd = connectionX;
+  const distFromRightEnd = span - connectionX;
+  const distFromNearestEnd = Math.min(distFromLeftEnd, distFromRightEnd);
+
+  return distFromNearestEnd <= 5 * d ? ANSITPI_END : ANSITPI_INTERIOR;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -179,8 +315,15 @@ export function buildSSTPayload(
 ): SSTPayload {
   // --- Carrying member (girder) ---
   const girderBC = findBottomChord(group.girder.treData?.members);
-  const girderWidth = girderBC?.width ?? 1.5;
-  const girderDepth = girderBC?.depth ?? 5.5;
+  // Bottom chord size (width AND height/depth) at the carried truss's connection
+  // point along the girder, with detection of varying chord sizes across
+  // segments. Using the connection segment — rather than the largest segment —
+  // fixes wrong BC height when the chord varies along its length.
+  const girderBCW = resolveBottomChordSegment(group.girder.treData?.members, {
+    connectionX: carried.localX,
+  });
+  const girderWidth = girderBCW.width > 0 ? girderBCW.width : (girderBC?.width ?? 1.5);
+  const girderDepth = girderBCW.depth > 0 ? girderBCW.depth : (girderBC?.depth ?? 5.5);
 
   // Detect king post (vertical web) at the connection point of this carried truss.
   // connectionX = localX of the carried truss along the girder span.
@@ -212,7 +355,12 @@ export function buildSSTPayload(
 
   // --- Carried member (truss) ---
   const carriedBC = findBottomChord(carried.treData?.members);
-  const carriedWidth = carriedBC?.width ?? 1.5;
+  // Bottom chord size at the carried truss's bearing end, with detection of
+  // varying chord sizes across segments.
+  const carriedBCW = resolveBottomChordSegment(carried.treData?.members, {
+    bearingSide: carried.bearingSide ?? 'left',
+  });
+  const carriedWidth = carriedBCW.width > 0 ? carriedBCW.width : (carriedBC?.width ?? 1.5);
   const carriedDepth = getCarriedDepth(carried);
 
   // Loads — already computed by enrichCarriedTrusses() in parser.ts
@@ -235,6 +383,16 @@ export function buildSSTPayload(
     ? SKEW_TYPE_NONE
     : (normalised < 90 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
+  // Slope — from IFC geometry (assembly principal-axis tilt). Placements are
+  // identity in this export, so the tilt is derived from the point cloud.
+  const slopeAngle = Math.round(carried.instance.orientation?.slopeDeg ?? 0);
+  const slopeType  = slopeAngle === 0 ? SLOPE_TYPE_NONE : SLOPE_TYPE_UP;
+
+  // Top-flange angles: bend follows the connection skew, slope follows the
+  // carried member slope (relevant for top-flange hangers).
+  const topFlangeBend  = skewAngle;
+  const topFlangeSlope = slopeAngle;
+
   const carriedMember: SSTCarriedMember = {
     material: MATERIAL_TRUSS,
     width: carriedWidth,
@@ -244,8 +402,10 @@ export function buildSSTPayload(
     angle: {
       skewAngle,
       skewType,
-      slopeAngle: 0,
-      slopeType: SLOPE_TYPE_NONE,
+      slopeAngle,
+      slopeType,
+      topFlangeBend,
+      topFlangeSlope,
     },
   };
 
@@ -271,7 +431,9 @@ export function buildSSTPayload(
     carriedMembers: [carriedMember],
     flushOption: FLUSH_BOTTOM,
     carryingMember: carryingMember,
-    ansitpi: ANSITPI_INTERIOR,
+    // ANSI/TPI 1 Evaluation: End vs Interior connection, derived from geometry
+    // via the "5d of chord size" rule (see computeAnsiTpi).
+    ansitpi: computeAnsiTpi(group, carried),
   };
 }
 

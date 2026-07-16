@@ -1,4 +1,4 @@
-import { GirderGroup, TrussInstance, TreData, CarriedTruss, Point3D, BoundingBox } from '../types';
+import { GirderGroup, TrussInstance, TreData, CarriedTruss, Point3D, BoundingBox, LumberSpeciesResult, HangerConnInfo } from '../types';
 
 export type LogCallback = (msg: string, type?: 'info'|'success'|'error'|'warning') => void;
 
@@ -140,6 +140,61 @@ function extractMaterials(entities: Map<number, string>): Map<number, { material
     }
   }
   return materials;
+}
+
+/**
+ * Compute an assembly's principal axis (direction of maximum spread) from its
+ * 3D point cloud and its tilt from horizontal.
+ *
+ * Placements in this IFC export are identity, so orientation lives in the
+ * geometry. We build the 3×3 covariance matrix of the points and find its
+ * dominant eigenvector via power iteration — that is the assembly's long axis.
+ * `slopeDeg` is the angle of that axis above/below horizontal, in [0, 90]:
+ *   - upright truss (long axis = span, horizontal) → ~0°
+ *   - tilted / sloped assembly → the tilt angle
+ *
+ * Returns null when there are too few points to be meaningful.
+ */
+function computeAssemblyOrientation(
+  points: Point3D[]
+): { slopeDeg: number; principalAxis: Point3D } | null {
+  if (!points || points.length < 3) return null;
+
+  // Centroid
+  let cx = 0, cy = 0, cz = 0;
+  for (const p of points) { cx += p.x; cy += p.y; cz += p.z; }
+  const n = points.length;
+  cx /= n; cy /= n; cz /= n;
+
+  // Covariance matrix (symmetric)
+  let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+  for (const p of points) {
+    const dx = p.x - cx, dy = p.y - cy, dz = p.z - cz;
+    xx += dx * dx; xy += dx * dy; xz += dx * dz;
+    yy += dy * dy; yz += dy * dz; zz += dz * dz;
+  }
+
+  // Power iteration for the dominant eigenvector.
+  let vx = 1, vy = 1, vz = 1;
+  for (let iter = 0; iter < 200; iter++) {
+    const wx = xx * vx + xy * vy + xz * vz;
+    const wy = xy * vx + yy * vy + yz * vz;
+    const wz = xz * vx + yz * vy + zz * vz;
+    const mag = Math.hypot(wx, wy, wz);
+    if (mag < 1e-9) return null; // degenerate (all points coincident)
+    const nx = wx / mag, ny = wy / mag, nz = wz / mag;
+    if (Math.abs(nx - vx) < 1e-10 && Math.abs(ny - vy) < 1e-10 && Math.abs(nz - vz) < 1e-10) {
+      vx = nx; vy = ny; vz = nz; break;
+    }
+    vx = nx; vy = ny; vz = nz;
+  }
+
+  // Tilt of the (unit) principal axis from horizontal.
+  const slopeDeg = Math.asin(Math.min(1, Math.abs(vz))) * (180 / Math.PI);
+  return {
+    slopeDeg: Math.round(slopeDeg * 10) / 10,
+    principalAxis: { x: vx, y: vy, z: vz },
+  };
 }
 
 function parseIfc(text: string, treMap: Map<string, TreData>): TrussInstance[] {
@@ -378,7 +433,8 @@ function parseIfc(text: string, treMap: Map<string, TreData>): TrussInstance[] {
           const count = assembly.points.length;
           const centroid = { x: sumX / count, y: sumY / count, z: sumZ / count };
           const boundingBox = { minX, maxX, minY, maxY, minZ, maxZ };
-          
+          const orientation = computeAssemblyOrientation(assembly.points) ?? undefined;
+
           instances.push({
               id: `${assembly.label}_${Math.round(centroid.x)}_${Math.round(centroid.y)}_${assemblyId}`,
               label: assembly.label,
@@ -386,6 +442,7 @@ function parseIfc(text: string, treMap: Map<string, TreData>): TrussInstance[] {
               boundingBox,
               centroid,
               leftEnd,
+              orientation,
               ifcTopChord,
               ifcBottomChord,
               ifcWebs
@@ -627,6 +684,173 @@ function computeMajoritySpec(members: Array<{ name: string; size: string; grade:
   }
 
   return { majority, exceptions };
+}
+
+// ---------------------------------------------------------------------------
+// Lumber Species — with mixed-segment detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Lumber specific gravity (G) per NDS, for common truss species.
+ * Lower G ⇒ lower fastener/connection capacity ⇒ MORE conservative.
+ */
+const SPECIES_SPECIFIC_GRAVITY: Record<string, number> = {
+  SP: 0.55,    // Southern Pine
+  DFL: 0.50,   // Douglas Fir-Larch
+  DFS: 0.46,   // Douglas Fir-South
+  HF: 0.43,    // Hem-Fir
+  SPF: 0.42,   // Spruce-Pine-Fir
+  SPFS: 0.36,  // Spruce-Pine-Fir (South)
+};
+
+/** Normalise a raw species token to a canonical key in SPECIES_SPECIFIC_GRAVITY. */
+function normaliseSpecies(raw: string): string {
+  const s = (raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (s === 'SP' || s === 'SYP' || s === 'SOUTHERNPINE') return 'SP';
+  if (s === 'DF' || s === 'DFL' || s === 'DOUGLASFIRLARCH') return 'DFL';
+  if (s === 'DFS' || s === 'DOUGLASFIRSOUTH') return 'DFS';
+  if (s === 'HF' || s === 'HEMFIR') return 'HF';
+  if (s === 'SPFS' || s === 'SPFSOUTH' || s === 'SPFSOUTHERN') return 'SPFS';
+  if (s === 'SPF' || s === 'SPRUCEPINEFIR') return 'SPF';
+  return s; // unknown → returned as-is
+}
+
+/** Specific gravity for a species token, or null if unrecognised. */
+function speciesSpecificGravity(raw: string): number | null {
+  const key = normaliseSpecies(raw);
+  return key in SPECIES_SPECIFIC_GRAVITY ? SPECIES_SPECIFIC_GRAVITY[key] : null;
+}
+
+/**
+ * Resolve the lumber species for one member group (e.g. all bottom-chord
+ * segments), detecting mixed lumber types across segments.
+ *
+ *  - "mixed" = the segments differ in full spec (size + grade + species).
+ *  - When mixed, the reported species is the MOST CONSERVATIVE (lowest specific
+ *    gravity) among the distinct species present. Unrecognised species tokens
+ *    are treated as most conservative (we cannot assume they are strong), so
+ *    they surface in the reported value.
+ *  - When uniform, the reported species is simply that species.
+ */
+export function resolveLumberSpecies(
+  members: Array<{ name: string; size: string; grade: string; species: string }>
+): LumberSpeciesResult {
+  const segments = members.map(m => ({
+    name: m.name,
+    spec: `${m.size} ${m.grade} ${m.species}`.replace(/\s+/g, ' ').trim(),
+    species: (m.species || '').trim(),
+  }));
+
+  if (segments.length === 0) {
+    return { species: '', mixed: false, specificGravity: null, segments: [] };
+  }
+
+  const mixed = new Set(segments.map(s => s.spec)).size > 1;
+
+  const distinctSpecies = [...new Set(segments.map(s => s.species).filter(Boolean))];
+  let reported: string;
+  if (distinctSpecies.length === 0) {
+    reported = '';
+  } else {
+    // Prefer an unrecognised species (conservative: cannot assume it is strong),
+    // otherwise the lowest specific gravity.
+    const unknown = distinctSpecies.find(sp => speciesSpecificGravity(sp) === null);
+    reported = unknown ?? distinctSpecies.reduce((a, b) =>
+      (speciesSpecificGravity(b) as number) < (speciesSpecificGravity(a) as number) ? b : a
+    );
+  }
+
+  return {
+    species: reported,
+    mixed,
+    specificGravity: speciesSpecificGravity(reported),
+    segments,
+  };
+}
+
+/**
+ * Compute lumber species (with mixed-segment detection) for every member group
+ * of a truss. Prefers [ADDITIONAL CUTTING INFO] segments; falls back to
+ * MEMBER INFO members when cutting info is absent for a group.
+ */
+function computeTrussLumberSpecies(
+  cuttingMembers: Array<{ name: string; type: string; size: string; grade: string; species: string }>,
+  memberInfo: TreMember[]
+): { topChord: LumberSpeciesResult; bottomChord: LumberSpeciesResult; webs: LumberSpeciesResult } {
+  const pick = (type: 'TopChord' | 'BottomChord' | 'Web'): LumberSpeciesResult => {
+    const cut = cuttingMembers.filter(m => m.type === type);
+    if (cut.length > 0) return resolveLumberSpecies(cut);
+    const mi = memberInfo
+      .filter(m => m.type === type)
+      .map(m => ({ name: m.name, size: m.size, grade: m.grade, species: m.species }));
+    return resolveLumberSpecies(mi);
+  };
+  return {
+    topChord: pick('TopChord'),
+    bottomChord: pick('BottomChord'),
+    webs: pick('Web'),
+  };
+}
+
+/**
+ * Parse the TRE [Hanger Conn Info V4.2000] section into structured hanger
+ * records.
+ *
+ * PROTOTYPE / UNVERIFIED — the MiTek flag layout is undocumented. Confirmed
+ * field positions (validated against t07):
+ *   [1]=model  [2]=type  [3]=x-position(in)  [8]/[9]=bearing start/end(in)
+ *   [12]=carried label  [13]=angle
+ * Candidate (GUESSED) positions for the requested fields:
+ *   flushPosition   ← field[5]  mapped {0:Low, 1:Center, 2:High}
+ *   offsetDirection ← field[14] mapped {0:Center, 1:Left, 2:Right} (top-flange only)
+ * These guesses default to safe values (Center / N/A) for unmapped inputs and
+ * must be validated before being trusted or sent to the SST API.
+ */
+function parseHangerConnInfo(text: string): HangerConnInfo[] {
+  const lines = text.split('\n');
+  const out: HangerConnInfo[] = [];
+  let inSection = false;
+
+  const flushMap: Record<number, 'Low' | 'Center' | 'High'> = { 0: 'Low', 1: 'Center', 2: 'High' };
+  const offsetMap: Record<number, 'Center' | 'Left' | 'Right'> = { 0: 'Center', 1: 'Left', 2: 'Right' };
+
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.startsWith('[Hanger Conn Info')) { inSection = true; continue; }
+    if (inSection && t.startsWith('[')) break; // next section
+    if (!inSection) continue;
+
+    const m = t.match(/^HngC\d+\s*=\s*(.+)$/i);
+    if (!m) continue;
+
+    const f = m[1].split(',').map((s) => s.trim());
+    if (f.length < 14) continue;
+
+    const type = f[2] ?? '';
+    const isTopFlange = /top\s*flange|top\s*mount/i.test(type);
+    const num = (i: number) => {
+      const v = parseFloat(f[i]); return Number.isNaN(v) ? NaN : v;
+    };
+
+    const flushPosition = flushMap[num(5)] ?? 'Center';
+    const offsetDirection: HangerConnInfo['offsetDirection'] = isTopFlange
+      ? (offsetMap[num(14)] ?? 'Center')
+      : 'N/A';
+
+    out.push({
+      model: f[1] ?? '',
+      type,
+      isTopFlange,
+      xInches: Number.isNaN(num(3)) ? 0 : num(3),
+      carriedLabel: f[12] ?? '',
+      angle: Number.isNaN(num(13)) ? 0 : num(13),
+      rawFields: f,
+      offsetDirection,
+      flushPosition,
+      unverified: true,
+    });
+  }
+  return out;
 }
 
 function parseDOL(text: string): number | null {
@@ -945,6 +1169,8 @@ function parseTre(text: string, filename: string): TreData | null {
     leftStub,
     rightStub,
     csi,
+    lumberSpecies: computeTrussLumberSpecies(cuttingMembers, members),
+    hangerConnInfo: parseHangerConnInfo(text),
     rawText: text
   };
 }

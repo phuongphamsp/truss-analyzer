@@ -361,6 +361,48 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         </div>
                                     )}
                                 </div>
+                                {group.girder.treData?.lumberSpecies && (
+                                    <div>
+                                        <div className="text-[8px] uppercase text-zinc-400 mb-0.5">Lumber Species</div>
+                                        <div className="text-xs space-y-1">
+                                            {([
+                                                ['Top Chord', group.girder.treData.lumberSpecies.topChord],
+                                                ['Bottom Chord', group.girder.treData.lumberSpecies.bottomChord],
+                                                ['Webs', group.girder.treData.lumberSpecies.webs],
+                                            ] as const).map(([label, ls]) => (
+                                                ls && ls.species ? (
+                                                    <div key={label} className="flex justify-between items-center border-b border-[#2D313F]/60 pb-1">
+                                                        <span className="font-semibold text-zinc-300">{label}</span>
+                                                        <span className="flex items-center gap-1.5">
+                                                            <span className="font-bold text-amber-300">{ls.species}</span>
+                                                            {ls.mixed && (
+                                                                <span className="px-1 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-400" title={ls.segments.map(s => `${s.name}: ${s.spec}`).join(' · ')}>Mixed</span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                ) : null
+                                            ))}
+                                        </div>
+                                        <div className="text-[8px] text-zinc-500 mt-0.5 leading-tight">Most conservative species; "Mixed" = segments differ in size/grade/species (hover for details).</div>
+                                    </div>
+                                )}
+                                {group.girder.treData?.hangerConnInfo && group.girder.treData.hangerConnInfo.length > 0 && (
+                                    <div>
+                                        <div className="text-[8px] uppercase text-zinc-400 mb-0.5 flex items-center gap-1">
+                                            Hangers
+                                            <span className="px-1 py-0.5 rounded text-[7px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400">Prototype · Unverified</span>
+                                        </div>
+                                        <div className="text-[10px] space-y-1 font-mono">
+                                            {group.girder.treData.hangerConnInfo.map((h, i) => (
+                                                <div key={i} className="flex justify-between border-b border-[#2D313F]/60 pb-1">
+                                                    <span className="font-semibold text-zinc-300">{h.model} · {h.carriedLabel}</span>
+                                                    <span className="text-zinc-400">{h.type.replace(' Hanger', '')} · offset {h.offsetDirection} · flush {h.flushPosition}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="text-[8px] text-zinc-500 mt-0.5 leading-tight">Offset Direction &amp; Flush are UNVERIFIED guesses from [Hanger Conn Info] flag fields — validate before use.</div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

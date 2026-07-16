@@ -525,7 +525,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <MappingRow2 label="Job ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField={`LG{n}T= parts[4] (carried label) + girder label`} note="e.g. T07 on T04" />
                 <MappingRow2 label="Building Code" badge="Default" badgeColor="gray" note="IRC 2018" />
                 <MappingRow2 label="Duration of Load" badge="Default" badgeColor="gray" note="Roof = 1.25 (download) · Wind/Quake = 1.60 (uplift)" />
-                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Default" badgeColor="gray" note="Interior Connection (6) — carried truss bears on girder mid-span" />
+                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Derived" badgeColor="green" note="End (3) if connection within 5×d of a girder end, else Interior (6); d = carried chord depth" />
                 <MappingRow2 label="Hanger Type" badge="Default" badgeColor="gray" note="All Types (0) — no filter" />
               </div>
 
@@ -534,8 +534,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → girder label" note="e.g. T07" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
-                <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
-                <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
+                <MappingRow2 label="Bottom Chord Width" badge="Computed" badgeColor="amber" treSection="MEMBER INFO" treField="BottomChord segment containing localX → width (inches)" note="width at connection point; detects varying chord sizes across segments" />
+                <MappingRow2 label="Bottom Chord Height" badge="Computed" badgeColor="amber" treSection="MEMBER INFO" treField="BottomChord segment containing localX → depth (inches)" note="height at connection segment (not largest); detects varying chord sizes across segments" />
+                <MappingRow2 label="Lumber Species" badge="Computed" badgeColor="amber" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord segments → species (resolveLumberSpecies)" note="most conservative species (lowest specific gravity); flags mixed segments by size+grade+species" />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
                 <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="max(leftHeel, BC depth, 24&quot;) — overall girder height at connection point" />
                 <MappingRow2 label="Vertical Width (King Post)" badge="Computed" badgeColor="amber" note="Scans Web members for vertical segment at connection X ±2&quot; · width of that web member" />
@@ -546,7 +547,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → carried label" note="e.g. T02" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
-                <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
+                <MappingRow2 label="Bottom Chord Width" badge="Computed" badgeColor="amber" treSection="MEMBER INFO" treField="BottomChord segment at bearing end → width (inches)" note="width at bearing end; detects varying chord sizes across segments" />
+                <MappingRow2 label="Lumber Species" badge="Computed" badgeColor="amber" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord segments → species (resolveLumberSpecies)" note="most conservative species (lowest specific gravity); flags mixed segments by size+grade+species" />
                 <MappingRow2 label="Heel Height" badge="TRE" badgeColor="green"
                   treSection="[TRUSS DETAILS]"
                   treField="Left Heel Height= or Right Heel Height= (chosen by bearing side)"
@@ -569,9 +571,11 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5 pt-1">Hanger Options</div>
               <div className="space-y-1">
                 <MappingRow2 label="Skew (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
-                <MappingRow2 label="Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
-                <MappingRow2 label="Top Flange Bend (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
-                <MappingRow2 label="Top Flange Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+                <MappingRow2 label="Slope (Degrees)" badge="Computed" badgeColor="amber" treSection="IFC geometry" treField="assembly point cloud → principal-axis tilt" note="tilt of the truss's principal axis from horizontal (placements are identity, so derived from geometry)" />
+                <MappingRow2 label="Top Flange Bend (Degrees)" badge="Computed" badgeColor="amber" treSection="IFC / TRE" treField="follows connection skew" note="top-flange bend follows the skew angle" />
+                <MappingRow2 label="Top Flange Slope (Degrees)" badge="Computed" badgeColor="amber" treSection="IFC geometry" treField="follows carried member slope" note="top-flange slope follows the IFC-derived member slope" />
+                <MappingRow2 label="Offset Direction (Top Flange Only)" badge="Prototype" badgeColor="red" treSection="[Hanger Conn Info V4.2000]" treField="HngC field[14] (top-flange only)" note="UNVERIFIED guess {0:Center,1:Left,2:Right}; N/A for face-mount hangers. Not sent to SST API — validate before use" />
+                <MappingRow2 label="High / Low / Center Flush" badge="Prototype" badgeColor="red" treSection="[Hanger Conn Info V4.2000]" treField="HngC field[5]" note="UNVERIFIED guess {0:Low,1:Center,2:High}; defaults to Center. Not sent to SST API — validate before use" />
               </div>
             </div>
 
@@ -580,8 +584,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="text-[8px] uppercase text-zinc-400 font-bold tracking-wider">Known Data Gaps</div>
               <ul className="text-zinc-500 leading-relaxed space-y-0.5 list-disc list-inside">
                 <li><span className="text-zinc-300">Ply count</span> — not in TRE; defaults to 1</li>
-                <li><span className="text-zinc-300">Skew / Slope / Top Flange angles</span> — not in TRE/IFC; all default to 0°</li>
-                <li><span className="text-zinc-300">Species grade mapping</span> — TRE has grade string (e.g. "No.2 SP") but SST uses numeric codes; not yet mapped</li>
+                <li><span className="text-zinc-300">Slope / Top Flange Bend / Top Flange Slope</span> — now derived (Slope = IFC assembly principal-axis tilt; Top Flange Bend ← skew; Top Flange Slope ← slope)</li>
+                <li><span className="text-zinc-300">Offset Direction / High-Low-Center Flush</span> — PROTOTYPE only: candidate guesses from [Hanger Conn Info] flag fields (field[14]/field[5]); determination method not yet confirmed, not sent to SST API</li>
+                <li><span className="text-zinc-300">Species → SST numeric code</span> — species is now detected (resolveLumberSpecies, with mixed-segment handling); mapping the species string to SST's numeric code is still pending</li>
                 <li><span className="text-zinc-300">Lateral load</span> — not available in TRE/IFC</li>
               </ul>
             </div>

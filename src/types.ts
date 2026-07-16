@@ -1,3 +1,45 @@
+/**
+ * Lumber species determination for one member group (top chord, bottom chord,
+ * or webs), including detection of chord segments with mixed lumber types.
+ */
+export interface LumberSpeciesResult {
+  /**
+   * Reported lumber species: the single species when all segments match, or —
+   * when segments are mixed — the MOST CONSERVATIVE (lowest specific gravity)
+   * species among the distinct species present.
+   */
+  species: string;
+  /** True when the group's segments differ in size, grade, or species. */
+  mixed: boolean;
+  /** Specific gravity of the reported species; null if the token is unrecognized. */
+  specificGravity: number | null;
+  /** Per-segment breakdown used for the determination. */
+  segments: Array<{ name: string; spec: string; species: string }>;
+}
+
+/**
+ * A selected hanger parsed from the TRE [Hanger Conn Info V4.2000] section.
+ *
+ * PROTOTYPE / UNVERIFIED: the MiTek TRE hanger flag layout is undocumented, so
+ * `offsetDirection` and `flushPosition` are best-guess candidate mappings tied
+ * to specific comma-separated field indices (see parseHangerConnInfo). They are
+ * NOT sent to the SST API and must be validated against known cases before use.
+ */
+export interface HangerConnInfo {
+  model: string;         // field[1], e.g. "JUS26"
+  type: string;          // field[2], e.g. "Face Mount Hanger"
+  isTopFlange: boolean;  // type text contains "Top Flange"/"Top Mount"
+  xInches: number;       // field[3], position along the girder
+  carriedLabel: string;  // field[12], carried truss label
+  angle: number;         // field[13], connection angle (270 = perpendicular)
+  rawFields: string[];   // all fields, for inspection/validation
+  /** UNVERIFIED candidate from field[14] (top-flange only; else 'N/A'). */
+  offsetDirection: 'N/A' | 'Left' | 'Right' | 'Center';
+  /** UNVERIFIED candidate from field[5]. */
+  flushPosition: 'High' | 'Low' | 'Center';
+  unverified: true;
+}
+
 export interface TreData {
   label: string;
   isGirder?: boolean;
@@ -42,6 +84,14 @@ export interface TreData {
   rightHeel?: number;
   leftStub?: number;   // Left Stub= field from TRE (inches from left end to left bearing)
   rightStub?: number;  // Right Stub= field from TRE (inches from right end to right bearing)
+  /** Lumber species per member group, with mixed-segment detection (see resolveLumberSpecies). */
+  lumberSpecies?: {
+    topChord: LumberSpeciesResult;
+    bottomChord: LumberSpeciesResult;
+    webs: LumberSpeciesResult;
+  };
+  /** Selected hangers from [Hanger Conn Info] (prototype; see HangerConnInfo). */
+  hangerConnInfo?: HangerConnInfo[];
   hangers?: Array<{
     xFeet: number;
     xInches: number;
@@ -79,6 +129,15 @@ export interface TrussInstance {
   ifcTopChord?: string;
   ifcBottomChord?: string;
   ifcWebs?: string;
+  /**
+   * Orientation derived from IFC geometry (placements in this export are
+   * identity, so orientation comes from the point cloud). slopeDeg is the tilt
+   * of the assembly's principal axis from horizontal, in degrees [0, 90].
+   */
+  orientation?: {
+    slopeDeg: number;
+    principalAxis: Point3D;
+  };
 }
 
 export interface CarriedTruss {

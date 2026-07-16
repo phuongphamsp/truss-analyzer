@@ -438,7 +438,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
             <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} sourceType="default" sourceNote="load duration factor" />
             <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} sourceType="default" sourceNote="uplift duration factor" />
             {isTruss && (
-              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} sourceType="default" sourceNote="truss connection type" />
+              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} sourceType="computed" sourceNote="5×d-from-end rule (d = carried chord depth)" />
             )}
             <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
@@ -503,9 +503,9 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         {sections.hanger && (
           <div className="py-1.5 pl-1 space-y-0.5">
             <Row label="Skew (Degrees)" value={`${cd.angle.skewAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="computed" sourceNote="IFC assembly principal-axis tilt" />
+            <Row label="Top Flange Bend (Degrees)" value={`${cd.angle.topFlangeBend}°`} sourceType="computed" sourceNote="follows skew" />
+            <Row label="Top Flange Slope (Degrees)" value={`${cd.angle.topFlangeSlope}°`} sourceType="computed" sourceNote="follows member slope" />
           </div>
         )}
 
