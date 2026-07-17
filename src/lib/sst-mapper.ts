@@ -139,18 +139,21 @@ interface KingPostResult {
  * Detect whether a vertical web (king post) exists at the connection point
  * of a carried truss on the girder.
  *
- * Strategy:
- * - connectionX = localX of the carried truss on the girder
- * - For each Web member in the girder's MEMBER INFO, scan consecutive coord pairs
- *   looking for a segment where |x1 - x2| < TOLERANCE (nearly vertical)
- *   AND the segment's x is within TOLERANCE of connectionX
- * - If found, kingWidth = member.width, kingHeight = |y2 - y1| of that segment
+ * Strategy (per tester spec):
+ * 1. For each Web member, compute midpoint X = (x_min + x_max) / 2 of all coords.
+ * 2. Check if midpoint X is within TOLERANCE of connectionX.
+ * 3. Verify the web is vertical: all coords share the same two distinct x values
+ *    (i.e. x1=x4 and x2=x3 in the 4-point rectangle layout).
+ * 4. Extract:
+ *    - kingWidth  = lumber depth (face width toward hanger, e.g. 3.5" for 2x4)
+ *    - kingHeight = max(y) across all coords of the web member
+ *                  (absolute height from bottom of girder to top of king post)
  */
 function findKingPost(
   members: TreData['members'],
   connectionX: number
 ): KingPostResult {
-  const TOLERANCE = 2.0; // inches — snap tolerance for "same x"
+  const TOLERANCE = 2.0; // inches — snap tolerance for midpoint match
 
   if (!members || members.length === 0) {
     return { hasKingPost: false, kingWidth: 0, kingHeight: 0 };
@@ -162,25 +165,34 @@ function findKingPost(
     const coords = web.coords;
     if (coords.length < 2) continue;
 
-    for (let i = 0; i < coords.length - 1; i++) {
-      const x1 = coords[i].x;
-      const y1 = coords[i].y;
-      const x2 = coords[i + 1].x;
-      const y2 = coords[i + 1].y;
+    const xs = coords.map(c => c.x);
+    const ys = coords.map(c => c.y);
 
-      const isVertical = Math.abs(x1 - x2) < TOLERANCE;
-      const atConnection = Math.abs(x1 - connectionX) < TOLERANCE;
-      const hasHeight = Math.abs(y2 - y1) > 0.5; // meaningful vertical extent
+    // Midpoint X of the web member (tester: (x_left + x_right) / 2)
+    const xMin = Math.min(...xs);
+    const xMax = Math.max(...xs);
+    const midX = (xMin + xMax) / 2;
 
-      if (isVertical && atConnection && hasHeight) {
-        return {
-          hasKingPost: true,
-          // King post stands vertically → face width toward hanger = lumber depth (e.g. 3.5" for 2x4)
-          // web.width = lumber thickness (1.5"), web.depth = lumber depth (3.5")
-          kingWidth: web.depth,
-          kingHeight: Math.abs(y2 - y1),
-        };
-      }
+    // Check if this web is at the connection point
+    if (Math.abs(midX - connectionX) > TOLERANCE) continue;
+
+    // Check if the web is vertical:
+    // A vertical king post has exactly 2 distinct x values (left face & right face)
+    // and the y range must be meaningful (not a degenerate point)
+    const uniqueXs = [...new Set(xs.map(x => Math.round(x * 1000) / 1000))];
+    const yRange = Math.max(...ys) - Math.min(...ys);
+    const isVertical = uniqueXs.length === 2 && yRange > 0.5;
+
+    if (isVertical) {
+      return {
+        hasKingPost: true,
+        // Face width toward hanger = lumber depth (e.g. 3.5" for 2x4)
+        // web.width = thickness (1.5"), web.depth = face depth (3.5")
+        kingWidth: web.depth,
+        // Total Height = max(y) of the web member = absolute height from girder bottom
+        // to top of king post (tester: "lấy cặp y lớn hơn")
+        kingHeight: Math.max(...ys),
+      };
     }
   }
 
