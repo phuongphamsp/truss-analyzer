@@ -38,6 +38,14 @@ const MATERIAL_LABELS: Record<number, string> = {
   1: 'Solid Sawn', 2: 'Glulam', 3: 'LSL', 4: 'LVL',
   5: 'Truss', 6: 'I-Joist', 7: 'Floor Truss', 10: 'Concrete', 11: 'Steel',
 };
+
+/** Lumber Species labels keyed by SST material code (truss species variant) */
+const SPECIES_LABELS: Record<number, string> = {
+  5: 'DF — Douglas Fir',
+  6: 'HF — Hem Fir',
+  7: 'SP — Southern Pine',
+  8: 'SPF — Spruce Pine Fir',
+};
 const STYLE_LABELS: Record<number, string> = {
   0: 'All Types', 1: 'Face Mount', 2: 'Top Flange', 3: 'Concealed Flange',
 };
@@ -231,6 +239,17 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   const cd = payload.carriedMembers[0];
   const isTruss = payload.flushOption === 'BOTTOM';
 
+  // Resolve species string for display (from cuttingMembers → bottomChord spec → ifcBottomChord)
+  const girderSpeciesStr =
+    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? group.girder.treData?.bottomChord
+    ?? group.girder.ifcBottomChord
+    ?? null;
+  const carriedSpeciesStr =
+    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? carried.treData?.bottomChord
+    ?? null;
+
   const set = <K extends keyof JobOverrides>(key: K, val: JobOverrides[K]) =>
     onOverridesChange({ ...overrides, [key]: val });
 
@@ -407,6 +426,12 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         {sections.carrying && (
           <div className="py-1">
             <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
+            <Row
+              label="Lumber Species"
+              value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
+              sourceType={girderSpeciesStr ? 'tre' : 'default'}
+              sourceNote={girderSpeciesStr ? `from TRE: "${girderSpeciesStr}"` : 'default: DF'}
+            />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
             <Row
@@ -437,6 +462,12 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         {sections.carried && (
           <div className="py-1">
             <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
+            <Row
+              label="Lumber Species"
+              value={SPECIES_LABELS[cd.material] ?? String(cd.material)}
+              sourceType={carriedSpeciesStr ? 'tre' : 'default'}
+              sourceNote={carriedSpeciesStr ? `from TRE: "${carriedSpeciesStr}"` : 'default: DF'}
+            />
             <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
               <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
@@ -534,6 +565,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → girder label" note="e.g. T07" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
+                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: bottomChord spec string → default DF (5)" />
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
@@ -546,6 +578,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → carried label" note="e.g. T02" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
+                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: bottomChord spec string → default DF (5)" />
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Heel Height" badge="TRE" badgeColor="green"
                   treSection="[TRUSS DETAILS]"
@@ -581,7 +614,6 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <ul className="text-zinc-500 leading-relaxed space-y-0.5 list-disc list-inside">
                 <li><span className="text-zinc-300">Ply count</span> — not in TRE; defaults to 1</li>
                 <li><span className="text-zinc-300">Skew / Slope / Top Flange angles</span> — not in TRE/IFC; all default to 0°</li>
-                <li><span className="text-zinc-300">Species grade mapping</span> — TRE has grade string (e.g. "No.2 SP") but SST uses numeric codes; not yet mapped</li>
                 <li><span className="text-zinc-300">Lateral load</span> — not available in TRE/IFC</li>
               </ul>
             </div>

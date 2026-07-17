@@ -29,6 +29,21 @@ export const MATERIAL_CONCRETE = 10;
 export const MATERIAL_STEEL = 11;
 
 // ---------------------------------------------------------------------------
+// Lumber Species → Material code mapping (Truss material type)
+//
+// When material = Truss, the species determines the exact material code:
+//   DF  (Douglas Fir)      → 5
+//   HF  (Hem Fir)          → 6
+//   SP  (Southern Pine)    → 7
+//   SPF (Spruce Pine Fir)  → 8
+// ---------------------------------------------------------------------------
+
+export const MATERIAL_TRUSS_DF  = 5;  // Douglas Fir
+export const MATERIAL_TRUSS_HF  = 6;  // Hem Fir
+export const MATERIAL_TRUSS_SP  = 7;  // Southern Pine
+export const MATERIAL_TRUSS_SPF = 8;  // Spruce Pine Fir
+
+// ---------------------------------------------------------------------------
 // ANSI/TPI connection type (root-level field)
 // ---------------------------------------------------------------------------
 

@@ -18,12 +18,18 @@ import type { GirderGroup, CarriedTruss, TreData } from '../types';
 import type { SSTPayload, SSTCarriedMember, SSTCarryingMember } from './sst-types';
 import {
   MATERIAL_TRUSS,
+  MATERIAL_TRUSS_DF,
+  MATERIAL_TRUSS_HF,
+  MATERIAL_TRUSS_SP,
+  MATERIAL_TRUSS_SPF,
   ANSITPI_INTERIOR,
   BUILDING_CODE_IRC2018,
   STYLE_ALL,
   FASTENER_ALL,
   FLUSH_BOTTOM,
   SKEW_TYPE_NONE,
+  SKEW_TYPE_LEFT,
+  SKEW_TYPE_RIGHT,
   SLOPE_TYPE_NONE,
   DL_DURATION_DEAD,
   DL_DURATION_FLOOR,
@@ -37,6 +43,36 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Map a lumber species string (from TRE file) to the SST API material code.
+ *
+ * TRE species strings → SST material codes:
+ *   "DF"  (Douglas Fir)     → 5
+ *   "HF"  (Hem Fir)         → 6
+ *   "SP"  (Southern Pine)   → 7
+ *   "SPF" (Spruce Pine Fir) → 8
+ *
+ * Matching is case-insensitive and checks if the species token appears
+ * anywhere in the spec string (e.g. "2x4 No.2 SP" → 7).
+ * Falls back to MATERIAL_TRUSS (5 = DF) if species is unknown.
+ */
+function speciesStringToMaterial(speciesOrSpec: string | undefined): number {
+  if (!speciesOrSpec) return MATERIAL_TRUSS;
+  const s = speciesOrSpec.trim().toUpperCase();
+  // Check longest token first to avoid "SP" matching inside "SPF"
+  if (s === 'SPF' || s.endsWith(' SPF')) return MATERIAL_TRUSS_SPF;
+  if (s === 'SP'  || s.endsWith(' SP'))  return MATERIAL_TRUSS_SP;
+  if (s === 'HF'  || s.endsWith(' HF'))  return MATERIAL_TRUSS_HF;
+  if (s === 'DF'  || s.endsWith(' DF'))  return MATERIAL_TRUSS_DF;
+  // Fallback: scan for token anywhere in the string
+  const tokens = s.split(/[\s,]+/);
+  if (tokens.includes('SPF')) return MATERIAL_TRUSS_SPF;
+  if (tokens.includes('SP'))  return MATERIAL_TRUSS_SP;
+  if (tokens.includes('HF'))  return MATERIAL_TRUSS_HF;
+  if (tokens.includes('DF'))  return MATERIAL_TRUSS_DF;
+  return MATERIAL_TRUSS; // default: DF (5)
+}
 
 /**
  * Map TRE load-case DOL factor → SST download duration type constant.
@@ -199,8 +235,17 @@ export function buildSSTPayload(
   // Ply from [ADDITIONAL TRUSS INFO] Ply= field; default 1 if not found
   const girderPly = group.girder.treData?.ply ?? 1;
 
+  // Species → material code for girder (carrying member).
+  // Use the bottom chord species from cuttingMembers (authoritative) or
+  // fall back to the majority bottomChord spec string (e.g. "2x6 No.2 SP").
+  const girderSpecies =
+    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? group.girder.treData?.bottomChord
+    ?? group.girder.ifcBottomChord;
+  const girderMaterial = speciesStringToMaterial(girderSpecies);
+
   const carryingMember: SSTCarryingMember = {
-    material: MATERIAL_TRUSS,
+    material: girderMaterial,
     width: girderWidth,
     depth: girderDepth,
     ply: girderPly,
@@ -222,6 +267,14 @@ export function buildSSTPayload(
   // Ply from [ADDITIONAL TRUSS INFO] Ply= field of carried truss; default 1 if not found
   const carriedPly = carried.treData?.ply ?? 1;
 
+  // Species → material code for carried truss.
+  // Use the bottom chord species from cuttingMembers (authoritative) or
+  // fall back to the majority bottomChord spec string (e.g. "2x4 No.2 SP").
+  const carriedSpecies =
+    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? carried.treData?.bottomChord;
+  const carriedMaterial = speciesStringToMaterial(carriedSpecies);
+
   // Skew angle — derived from LG*T field[14] (angle of carried truss relative to girder).
   // 90° or 270° = perpendicular (no skew) → skewAngle=0, skewType=NONE.
   // Other angles: skewAngle = |angle - 90| normalised to [0, 90].
@@ -236,7 +289,7 @@ export function buildSSTPayload(
     : (normalised < 90 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
   const carriedMember: SSTCarriedMember = {
-    material: MATERIAL_TRUSS,
+    material: carriedMaterial,
     width: carriedWidth,
     depth: carriedDepth > 0 ? carriedDepth : 3.5,
     ply: carriedPly,

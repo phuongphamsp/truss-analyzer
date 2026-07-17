@@ -238,6 +238,14 @@ const MATERIAL_LABELS: Record<number, string> = {
   1: 'Solid Sawn', 2: 'Glulam', 3: 'LSL', 4: 'LVL',
   5: 'Truss', 6: 'I-Joist', 7: 'Floor Truss', 10: 'Concrete', 11: 'Steel',
 };
+
+/** Lumber Species labels keyed by SST material code (truss species variant) */
+const SPECIES_LABELS: Record<number, string> = {
+  5: 'DF — Douglas Fir',
+  6: 'HF — Hem Fir',
+  7: 'SP — Southern Pine',
+  8: 'SPF — Spruce Pine Fir',
+};
 const STYLE_LABELS: Record<number, string> = {
   0: 'All Types', 1: 'Face Mount', 2: 'Top Flange', 3: 'Concealed Flange',
 };
@@ -352,9 +360,11 @@ interface PayloadPreviewProps {
   payload: SSTPayload;
   carriedLabel: string;
   girderLabel: string;
+  group: GirderGroup;
+  carried: CarriedTruss;
 }
 
-function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewProps) {
+function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: PayloadPreviewProps) {
   const [sections, setSections] = useState({
     connection: true,
     job: false,
@@ -369,6 +379,17 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
   const cm = payload.carryingMember;
   const cd = payload.carriedMembers[0];
   const isTruss = payload.flushOption === 'BOTTOM';
+
+  // Resolve species string for display
+  const girderSpeciesStr =
+    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? group.girder.treData?.bottomChord
+    ?? group.girder.ifcBottomChord
+    ?? null;
+  const carriedSpeciesStr =
+    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? carried.treData?.bottomChord
+    ?? null;
 
   return (
     <div className="border border-[#1E293B]/60 bg-[#0A0B10] rounded overflow-hidden">
@@ -454,6 +475,12 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         {sections.carrying && (
           <div className="py-1.5 pl-1 space-y-0.5">
             <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
+            <Row
+              label="Lumber Species"
+              value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
+              sourceType={girderSpeciesStr ? 'tre' : 'default'}
+              sourceNote={girderSpeciesStr ? `from TRE: "${girderSpeciesStr}"` : 'default: DF'}
+            />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
             <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
@@ -480,6 +507,12 @@ function PayloadPreview({ payload, carriedLabel, girderLabel }: PayloadPreviewPr
         {sections.carried && (
           <div className="py-1.5 pl-1 space-y-0.5">
             <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
+            <Row
+              label="Lumber Species"
+              value={SPECIES_LABELS[cd.material] ?? String(cd.material)}
+              sourceType={carriedSpeciesStr ? 'tre' : 'default'}
+              sourceNote={carriedSpeciesStr ? `from TRE: "${carriedSpeciesStr}"` : 'default: DF'}
+            />
             <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
               <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
@@ -660,6 +693,8 @@ export function HangerPanel({ group, selectedCarried }: HangerPanelProps) {
           payload={buildSSTPayload(group, selectedCarried)}
           carriedLabel={selectedCarried.instance.label}
           girderLabel={group.girder.label}
+          group={group}
+          carried={selectedCarried}
         />
       )}
 
