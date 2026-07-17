@@ -22,6 +22,7 @@ import {
   MATERIAL_TRUSS_HF,
   MATERIAL_TRUSS_SP,
   MATERIAL_TRUSS_SPF,
+  ANSITPI_END,
   ANSITPI_INTERIOR,
   BUILDING_CODE_IRC2018,
   STYLE_ALL,
@@ -187,6 +188,62 @@ function findKingPost(
 }
 
 /**
+ * Compute ANSI/TPI 1 connection type for a hanger on a girder.
+ *
+ * Rule (ANSI/TPI 1):
+ *   End Connection     (3) — hanger is within 5d from the NEAREST bearing end
+ *   Interior Connection(6) — hanger is >= 5d from BOTH bearing ends
+ *
+ * where d = actual depth of the girder bottom chord (inches).
+ *
+ * Hanger position (xInches) is measured from the LEFT physical end of the girder.
+ * Left bearing  = leftStub  (inches from left end to left bearing point)
+ * Right bearing = span - rightStub
+ *
+ * Returns an object so the UI can display the computed distances.
+ */
+export interface AnsitpiResult {
+  ansitpi: number;           // ANSITPI_END (3) or ANSITPI_INTERIOR (6)
+  distFromNearestBearing: number;  // inches — distance from nearest bearing
+  threshold: number;         // 5d in inches
+  isEndConnection: boolean;
+  girderBCDepth: number;     // d used in calculation
+}
+
+export function computeAnsitpi(
+  group: GirderGroup,
+  carried: CarriedTruss
+): AnsitpiResult {
+  const tre = group.girder.treData;
+
+  // Girder bottom chord depth (d)
+  const girderBC = findBottomChord(tre?.members);
+  const d = girderBC?.depth ?? 5.5; // default 2x6
+  const threshold = 5 * d;
+
+  // Hanger x position on girder (inches from left physical end)
+  const xInches = carried.localX ?? 0;
+
+  // Bearing positions (inches from left physical end)
+  const leftBearing  = tre?.leftStub  ?? 0;
+  const rightBearing = (tre?.span ?? 0) - (tre?.rightStub ?? 0);
+
+  const distFromLeft  = xInches - leftBearing;
+  const distFromRight = rightBearing - xInches;
+  const distFromNearestBearing = Math.min(distFromLeft, distFromRight);
+
+  const isEndConnection = distFromNearestBearing < threshold;
+
+  return {
+    ansitpi: isEndConnection ? ANSITPI_END : ANSITPI_INTERIOR,
+    distFromNearestBearing,
+    threshold,
+    isEndConnection,
+    girderBCDepth: d,
+  };
+}
+
+/**
  * Get heel height at the bearing side of a carried truss.
  * Falls back to the other side, then to 3.5" (2x4 depth).
  */
@@ -302,6 +359,9 @@ export function buildSSTPayload(
     },
   };
 
+  // ANSI/TPI 1 connection type — computed from hanger distance vs 5d rule
+  const ansitpiResult = computeAnsitpi(group, carried);
+
   // --- Full payload ---
   return {
     style: STYLE_ALL,
@@ -324,7 +384,7 @@ export function buildSSTPayload(
     carriedMembers: [carriedMember],
     flushOption: FLUSH_BOTTOM,
     carryingMember: carryingMember,
-    ansitpi: ANSITPI_INTERIOR,
+    ansitpi: ansitpiResult.ansitpi,
   };
 }
 

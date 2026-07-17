@@ -10,7 +10,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
-import { buildSSTPayload } from '../lib/sst-mapper';
+import { buildSSTPayload, computeAnsitpi } from '../lib/sst-mapper';
 import {
   hasSSTToken,
   submitToSST,
@@ -250,6 +250,10 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
     ?? carried.treData?.bottomChord
     ?? null;
 
+  // ANSI/TPI 1 connection type — computed from 5d rule
+  const ansitpiComputed = computeAnsitpi(group, carried);
+  const hasAnsitpiData = (group.girder.treData?.span ?? 0) > 0;
+
   const set = <K extends keyof JobOverrides>(key: K, val: JobOverrides[K]) =>
     onOverridesChange({ ...overrides, [key]: val });
 
@@ -403,8 +407,10 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 label="ANSI/TPI 1 Evaluation"
                 value={overrides.ansitpi}
                 onChange={(v) => set('ansitpi', v)}
-                sourceType="default"
-                sourceNote="truss connection type"
+                sourceType={hasAnsitpiData ? 'computed' : 'default'}
+                sourceNote={hasAnsitpiData
+                  ? `${ansitpiComputed.isEndConnection ? 'End' : 'Interior'}: dist=${ansitpiComputed.distFromNearestBearing.toFixed(2)}" vs 5d=${ansitpiComputed.threshold.toFixed(2)}" (d=${ansitpiComputed.girderBCDepth}")`
+                  : 'no TRE span data'}
                 options={[
                   { value: 0, label: 'Off' },
                   { value: 3, label: 'On (End Connection)' },
@@ -556,7 +562,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <MappingRow2 label="Job ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField={`LG{n}T= parts[4] (carried label) + girder label`} note="e.g. T07 on T04" />
                 <MappingRow2 label="Building Code" badge="Default" badgeColor="gray" note="IRC 2018" />
                 <MappingRow2 label="Duration of Load" badge="Default" badgeColor="gray" note="Roof = 1.25 (download) · Wind/Quake = 1.60 (uplift)" />
-                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Default" badgeColor="gray" note="Interior Connection (6) — carried truss bears on girder mid-span" />
+                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Computed" badgeColor="amber" treSection="[Hanger Loading Info.] + MEMBER INFO" treField="LG*T field[2]=xInches vs 5×BC_depth from nearest bearing" note="End (3) if dist &lt; 5d · Interior (6) if dist ≥ 5d · fallback: Interior" />
                 <MappingRow2 label="Hanger Type" badge="Default" badgeColor="gray" note="All Types (0) — no filter" />
               </div>
 

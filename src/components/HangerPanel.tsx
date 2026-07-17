@@ -11,7 +11,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
-import { buildSSTPayload, buildBatchPayloads } from '../lib/sst-mapper';
+import { buildSSTPayload, buildBatchPayloads, computeAnsitpi } from '../lib/sst-mapper';
 import {
   getSSTToken,
   setSSTToken,
@@ -391,6 +391,10 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
     ?? carried.treData?.bottomChord
     ?? null;
 
+  // ANSI/TPI 1 connection type — computed from 5d rule
+  const ansitpiComputed = computeAnsitpi(group, carried);
+  const hasAnsitpiData = (group.girder.treData?.span ?? 0) > 0;
+
   return (
     <div className="border border-[#1E293B]/60 bg-[#0A0B10] rounded overflow-hidden">
       {/* Title bar */}
@@ -459,7 +463,14 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
             <Row label="Download Duration" value={DL_DUR_LABELS[payload.designInformations.downloadDurationType] ?? String(payload.designInformations.downloadDurationType)} sourceType="default" sourceNote="load duration factor" />
             <Row label="Uplift Duration" value={UL_DUR_LABELS[payload.designInformations.upliftLoadDurationType] ?? String(payload.designInformations.upliftLoadDurationType)} sourceType="default" sourceNote="uplift duration factor" />
             {isTruss && (
-              <Row label="ANSI/TPI 1 Evaluation" value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)} sourceType="default" sourceNote="truss connection type" />
+              <Row
+                label="ANSI/TPI 1 Evaluation"
+                value={ANSITPI_LABELS[payload.ansitpi] ?? String(payload.ansitpi)}
+                sourceType={hasAnsitpiData ? 'computed' : 'default'}
+                sourceNote={hasAnsitpiData
+                  ? `${ansitpiComputed.isEndConnection ? 'End' : 'Interior'}: dist=${ansitpiComputed.distFromNearestBearing.toFixed(2)}" vs 5d=${ansitpiComputed.threshold.toFixed(2)}" (d=${ansitpiComputed.girderBCDepth}")`
+                  : 'no TRE span data'}
+              />
             )}
             <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
