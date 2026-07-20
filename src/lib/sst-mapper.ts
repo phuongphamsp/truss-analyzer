@@ -32,6 +32,8 @@ import {
   SKEW_TYPE_LEFT,
   SKEW_TYPE_RIGHT,
   SLOPE_TYPE_NONE,
+  SLOPE_TYPE_UP,
+  SLOPE_TYPE_DOWN,
   DL_DURATION_DEAD,
   DL_DURATION_FLOOR,
   DL_DURATION_SNOW,
@@ -355,6 +357,22 @@ export function buildSSTPayload(
     ? SKEW_TYPE_NONE
     : (normalised < 90 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
+  // Slope angle — derived from Bottom Chord Slopes of the carried truss at the bearing end.
+  // bearingSide='left'  → first segment  → bottomChordSlopes[0]
+  // bearingSide='right' → last segment   → bottomChordSlopes[last]
+  // slopeType is the OPPOSITE sign of BC slope:
+  //   BC slope < 0 (falling) → SLOPE_TYPE_UP (1)
+  //   BC slope > 0 (rising)  → SLOPE_TYPE_DOWN (2)
+  //   BC slope = 0           → SLOPE_TYPE_NONE (0)
+  const bcSlopes = carried.treData?.bottomChordSlopes;
+  const bcSlopeAtBearing = bcSlopes && bcSlopes.length > 0
+    ? (carried.bearingSide === 'right' ? bcSlopes[bcSlopes.length - 1] : bcSlopes[0])
+    : 0;
+  const slopeAngle = Math.round(Math.abs(bcSlopeAtBearing));
+  const slopeType  = slopeAngle === 0
+    ? SLOPE_TYPE_NONE
+    : (bcSlopeAtBearing < 0 ? SLOPE_TYPE_UP : SLOPE_TYPE_DOWN);
+
   const carriedMember: SSTCarriedMember = {
     material: carriedMaterial,
     width: carriedWidth,
@@ -364,8 +382,8 @@ export function buildSSTPayload(
     angle: {
       skewAngle,
       skewType,
-      slopeAngle: 0,
-      slopeType: SLOPE_TYPE_NONE,
+      slopeAngle,
+      slopeType,
     },
   };
 

@@ -42,6 +42,7 @@ export interface TreData {
   rightHeel?: number;
   leftStub?: number;   // Left Stub= field from TRE (inches from left end to left bearing)
   rightStub?: number;  // Right Stub= field from TRE (inches from right end to right bearing)
+  bottomChordSlopes?: number[];  // Bottom Chord Slopes= field (degrees per segment, left→right)
   hangers?: Array<{
     xFeet: number;
     xInches: number;

@@ -924,6 +924,15 @@ function parseTre(text: string, filename: string): TreData | null {
   const plyM = text.match(/^Ply\s*=\s*(\d+)/mi);
   if (plyM) ply = parseInt(plyM[1], 10);
 
+  // Bottom Chord Slopes= (degrees per segment, left→right)
+  // e.g. "Bottom Chord Slopes=0.00 14.04 -14.04"
+  let bottomChordSlopes: number[] | undefined = undefined;
+  const bcsM = text.match(/^Bottom\s+Chord\s+Slopes\s*=\s*([^\r\n]+)/mi);
+  if (bcsM) {
+    const vals = bcsM[1].trim().split(/\s+/).map(parseFloat).filter(v => !isNaN(v));
+    if (vals.length > 0) bottomChordSlopes = vals;
+  }
+
   return {
     label,
     isGirder,
@@ -944,6 +953,7 @@ function parseTre(text: string, filename: string): TreData | null {
     rightHeel,
     leftStub,
     rightStub,
+    bottomChordSlopes,
     csi,
     rawText: text
   };
