@@ -1407,13 +1407,6 @@ function analyzeConnections(instances: TrussInstance[], treMap: Map<string, TreD
           }
           if (!isRepeated) continue;
 
-          // FILTER 2: Carried truss should be SHORTER than girder
-          const gLen = Math.max(girder.boundingBox!.maxX - girder.boundingBox!.minX, girder.boundingBox!.maxY - girder.boundingBox!.minY);
-          const cLen = Math.max(carriedInstance.boundingBox!.maxX - carriedInstance.boundingBox!.minX, carriedInstance.boundingBox!.maxY - carriedInstance.boundingBox!.minY);
-          // Relax multiplier to 2.5 for single-instance or special girders (like T07 or G01)
-          const multiplier = (freq[girder.label.toUpperCase()] || 1) === 1 || girder.label.toUpperCase() === 'T07' || girder.label.toUpperCase() === 'G01' ? 2.5 : 1.5;
-          if (cLen > gLen * multiplier) continue;
-
           // Add to potential connections
           connections.push({ girder, carried: carriedInstance });
         }
