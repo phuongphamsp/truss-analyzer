@@ -963,8 +963,9 @@ function parseTre(text: string, filename: string): TreData | null {
  *
  * 2. Carried truss TRE có section REACTION INFO với N load cases.
  *    Mỗi load case là 1 block gồm:
- *    - Header line: "2 -1 -1 -1 -1 <bearingA> <bearingB> ..."
- *      → bearingA và bearingB là 2 đầu bearing của carried truss
+ *    - Header line: "<N> -1 -1 -1 -1 <bearing0> [<bearing1> ...] <dolFactor>"
+ *      → N = số bearings (2 cho truss thường, 3+ cho multi-bearing truss)
+ *      → bearing coords là tất cả các giá trị từ field[5] đến field[length-2]
  *    - Data lines: mỗi nhóm ứng với 1 bearing end
  *      → dòng tổng (governing) có col[6] = -1
  *      → col[1] = reaction value tại bearing đó
@@ -1007,28 +1008,31 @@ function parseReactionAtBearing(
   while (i < lines.length) {
     const line = lines[i].trim();
 
-    // Header block: "2 -1 -1 -1 -1 <bearingA> <bearingB> ... <dolFactor>"
-    if (!line.startsWith('2 -1 -1 -1 -1')) { i++; continue; }
+    // Header block: "<N> -1 -1 -1 -1 <bearing0> <bearing1> [<bearing2> ...] <dolFactor>"
+    // N = number of bearings (2 for standard truss, 3+ for multi-bearing/girder truss)
+    if (!line.match(/^\d+ -1 -1 -1 -1/)) { i++; continue; }
 
     const hp = line.split(/\s+/);
     if (hp.length < 7) { i++; continue; }
 
-    const bearingA  = parseFloat(hp[5]); // smaller coord → LEFT end
-    const bearingB  = parseFloat(hp[6]); // larger coord  → RIGHT end
     // dolFactor is the last field of the header line (e.g. 1.150000, 1.600000)
     const dolFactor = parseFloat(hp[hp.length - 1]);
 
-    // Xác định targetBearing khớp với bearing nào
-    const matchA = Math.abs(bearingA - targetBearing) <= BEARING_LOCATION_TOLERANCE;
-    const matchB = Math.abs(bearingB - targetBearing) <= BEARING_LOCATION_TOLERANCE;
-    if (!matchA && !matchB) { i++; continue; }
+    // Bearing coords start at hp[5]; last field is dolFactor, so bearings are hp[5..length-2]
+    // Find which bearing coord matches targetBearing
+    const bearingCoords = hp.slice(5, hp.length - 1).map(parseFloat).filter(v => !isNaN(v));
+    const matchedBearing = bearingCoords.find(
+      b => Math.abs(b - targetBearing) <= BEARING_LOCATION_TOLERANCE
+    );
+    if (matchedBearing === undefined) { i++; continue; }
 
-    // bearingA = left end (x≈0), bearingB = right end (x≈span)
+    // Determine bearing side: smallest coord = left end, largest = right end
     if (resolvedBearingSide === null) {
-      resolvedBearingSide = matchA ? 'left' : 'right';
+      const minB = Math.min(...bearingCoords);
+      const maxB = Math.max(...bearingCoords);
+      resolvedBearingSide = Math.abs(matchedBearing - minB) <= Math.abs(matchedBearing - maxB)
+        ? 'left' : 'right';
     }
-
-    const matchedBearing = matchA ? bearingA : bearingB;
 
     // Đọc data lines của block này
     i++;
@@ -1036,7 +1040,7 @@ function parseReactionAtBearing(
       const dl = lines[i].trim();
 
       // Kết thúc block khi gặp header mới
-      if (dl.startsWith('2 -1 -1 -1 -1')) break;
+      if (dl.match(/^\d+ -1 -1 -1 -1/)) break;
       // Kết thúc section
       if (dl === 'REACTION INFO' || (dl.startsWith('[') && dl !== '')) break;
 
