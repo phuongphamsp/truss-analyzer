@@ -575,7 +575,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
-                <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="max(leftHeel, BC depth, 24&quot;) — overall girder height at connection point" />
+                <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="vertical web height if king post found, otherwise BC depth — overall girder height at connection point" />
                 <MappingRow2 label="Vertical Width (King Post)" badge="Computed" badgeColor="amber" note="Scans Web members for vertical segment at connection X ±2&quot; · width of that web member" />
               </div>
 
