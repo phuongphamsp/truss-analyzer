@@ -99,9 +99,8 @@ function dolFactorToDownloadDuration(dolFactor: number | undefined): number {
 
 function dolFactorToUpliftDuration(dolFactor: number | undefined): number {
   if (dolFactor === undefined || dolFactor === null) return UL_DURATION_WIND_QUAKE; // default
-  const f = Math.round(dolFactor * 100);
-  if (f <= 100) return UL_DURATION_NORMAL;
-  return UL_DURATION_WIND_QUAKE; // 160
+  // >= 1.33 (Wind/Seismic) → 160; < 1.33 (Snow/Roof/Floor/Dead) → 100
+  return dolFactor >= 1.33 ? UL_DURATION_WIND_QUAKE : UL_DURATION_NORMAL;
 }
 
 
