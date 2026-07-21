@@ -381,9 +381,9 @@ export function buildSSTPayload(
     ply: carriedPly,
     loads: { load, uplift },
     angle: {
-      skewAngle: Math.round(rawSkew),  // signed value sent to SST API (-90 to +90)
-      skewRaw: Math.round(rawSkew),    // same value, used for UI display
-      skewType,
+      skewAngle,                    // magnitude (always >= 0) sent to SST API
+      skewRaw: Math.round(rawSkew), // signed (-90 to +90), used for UI display
+      skewType,                     // 0=None, 1=Left(negative), 2=Right(positive)
       slopeAngle,
       slopeType,
     },
