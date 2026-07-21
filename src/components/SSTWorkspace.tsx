@@ -7,7 +7,7 @@
  *   Right column = OUTPUT (token, action button, results table + filter bar)
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
 import { buildSSTPayload, computeAnsitpi } from '../lib/sst-mapper';
@@ -16,7 +16,9 @@ import {
   submitToSST,
 } from '../lib/sst-api';
 import { cn } from '../lib/utils';
-import { Search, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight, RotateCcw, SlidersHorizontal, X } from 'lucide-react';
+import { Search, AlertCircle, CheckCircle, Maximize2, Columns, ChevronLeft, ChevronRight, RotateCcw, SlidersHorizontal, X, Package, PackageCheck } from 'lucide-react';
+import type { ParsedInventory } from '../lib/inventory';
+import { loadInventoryFile, isInStock } from '../lib/inventory';
 
 // ---------------------------------------------------------------------------
 // Job Settings overrides — user-editable fields lifted to SSTWorkspace
@@ -760,6 +762,10 @@ function OutputPanel({
   const [filters, setFilters] = useState<OutputFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [sortByInstalledCost, setSortByInstalledCost] = useState(true);
+  const [inventory, setInventory] = useState<ParsedInventory | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [filterInStockOnly, setFilterInStockOnly] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Build effective payload with user overrides applied
   const effectivePayload: SSTPayload = {
@@ -804,7 +810,10 @@ function OutputPanel({
 
   const allHangers = result?.success ? result.hangers : [];
   const filtered = (() => {
-    const f = applyFilters(allHangers, filters);
+    let f = applyFilters(allHangers, filters);
+    if (filterInStockOnly && inventory) {
+      f = f.filter((h) => isInStock(h.model, inventory));
+    }
     if (!sortByInstalledCost) return f;
     return [...f].sort((a, b) => {
       const aVal = a.installedCost > 0 ? a.installedCost : Infinity;
@@ -816,6 +825,21 @@ function OutputPanel({
 
   const setFilter = <K extends keyof OutputFilters>(key: K, val: string) =>
     setFilters((f) => ({ ...f, [key]: val }));
+
+  const handleInventoryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setInventoryError(null);
+    try {
+      const parsed = await loadInventoryFile(file);
+      setInventory(parsed);
+    } catch (err) {
+      setInventoryError(err instanceof Error ? err.message : 'Failed to parse inventory file');
+      setInventory(null);
+    }
+    // reset input so same file can be re-imported
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -880,6 +904,62 @@ function OutputPanel({
             {viewMode === 'output-only' ? <Columns className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
         </div>
+      </div>
+
+      {/* INVENTORY BAR */}
+      <div className="bg-[#12131C] border-b border-[#1E293B] px-3 py-1.5 shrink-0 flex items-center gap-2 flex-wrap">
+        <Package className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+        <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider shrink-0">Inventory</span>
+
+        {/* Import button */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".xml"
+          className="hidden"
+          onChange={handleInventoryFile}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono border border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 transition-colors"
+        >
+          {inventory ? 'Replace XML' : 'Import XML'}
+        </button>
+
+        {/* Loaded indicator */}
+        {inventory && (
+          <>
+            <span className="text-[9px] font-mono text-emerald-400 flex items-center gap-1">
+              <PackageCheck className="w-3 h-3" />
+              {inventory.inStockSet.size} models in stock
+            </span>
+            <button
+              onClick={() => setFilterInStockOnly((v) => !v)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono border transition-colors ${
+                filterInStockOnly
+                  ? 'border-emerald-500/60 text-emerald-400 bg-emerald-950/40'
+                  : 'border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200'
+              }`}
+            >
+              {filterInStockOnly ? 'In Stock Only ✓' : 'Show In Stock Only'}
+            </button>
+            <button
+              onClick={() => { setInventory(null); setFilterInStockOnly(false); setInventoryError(null); }}
+              className="ml-auto text-[9px] text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-0.5"
+              title="Remove inventory"
+            >
+              <X className="w-3 h-3" /> Remove
+            </button>
+          </>
+        )}
+
+        {/* Error */}
+        {inventoryError && (
+          <span className="text-[9px] font-mono text-red-400 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />
+            {inventoryError}
+          </span>
+        )}
       </div>
 
       {/* FILTER BAR */}
@@ -1099,12 +1179,22 @@ function OutputPanel({
                         label === 'Lowest' ? 'text-emerald-400' :
                         label === '—'      ? 'text-zinc-500' :
                         'text-zinc-400';
+                      const inStock = isInStock(h.model, inventory);
                       return (
                       <tr
                         key={`${h.model}-${i}`}
-                        className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
+                        className={`border-b border-[#1E293B]/40 transition-colors ${
+                          inStock
+                            ? 'bg-emerald-950/20 hover:bg-emerald-950/40'
+                            : 'hover:bg-[#1E293B]/20'
+                        }`}
                       >
-                        <td className="py-2 px-3 font-bold text-zinc-200">{h.model}</td>
+                        <td className="py-2 px-3 font-bold text-zinc-200 flex items-center gap-1.5">
+                          {inStock && (
+                            <PackageCheck className="w-3 h-3 text-emerald-400 shrink-0" title="In stock" />
+                          )}
+                          {h.model}
+                        </td>
                         <td className="py-2 px-3 text-right">
                           <span className={`text-[10px] font-semibold ${labelColor}`}>
                             {label}
