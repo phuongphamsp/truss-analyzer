@@ -704,13 +704,17 @@ const EMPTY_FILTERS: OutputFilters = {
   maxHeight: '',
 };
 
-/** Convert ICI (Installed Cost Index) to a human-readable label matching SST UI */
-function installedCostLabel(ici: number): string {
-  if (ici <= 0) return '—';
-  if (ici <= 100) return 'Lowest';
-  if (ici <= 200) return 'Low';
-  if (ici <= 300) return 'Medium';
-  return 'High';
+/**
+ * Format Installed Cost relative to the cheapest option in the list — matching SST UI:
+ *   - cheapest row  → "Lowest"
+ *   - other rows    → "+X.XX%"
+ * ici = 0 means unknown → "—"
+ */
+function installedCostLabel(ici: number, minIci: number): string {
+  if (ici <= 0 || minIci <= 0) return '—';
+  if (ici === minIci) return 'Lowest';
+  const pct = ((ici - minIci) / minIci) * 100;
+  return `+${pct.toFixed(2)}%`;
 }
 
 
@@ -1086,22 +1090,24 @@ function OutputPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length > 0 ? (
-                    filtered.map((h, i) => (
+                  {filtered.length > 0 ? (() => {
+                    const validIcis = filtered.map(h => h.installedCost).filter(v => v > 0);
+                    const minIci = validIcis.length > 0 ? Math.min(...validIcis) : 0;
+                    return filtered.map((h, i) => {
+                      const label = installedCostLabel(h.installedCost, minIci);
+                      const labelColor =
+                        label === 'Lowest' ? 'text-emerald-400' :
+                        label === '—'      ? 'text-zinc-500' :
+                        'text-zinc-400';
+                      return (
                       <tr
                         key={`${h.model}-${i}`}
                         className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
                       >
                         <td className="py-2 px-3 font-bold text-zinc-200">{h.model}</td>
                         <td className="py-2 px-3 text-right">
-                          <span className={`text-[10px] font-semibold ${
-                            installedCostLabel(h.installedCost) === 'Lowest' ? 'text-emerald-400' :
-                            installedCostLabel(h.installedCost) === 'Low'    ? 'text-green-400' :
-                            installedCostLabel(h.installedCost) === 'Medium' ? 'text-yellow-400' :
-                            installedCostLabel(h.installedCost) === 'High'   ? 'text-red-400' :
-                            'text-zinc-500'
-                          }`}>
-                            {installedCostLabel(h.installedCost)}
+                          <span className={`text-[10px] font-semibold ${labelColor}`}>
+                            {label}
                           </span>
                         </td>
                         <td className="py-2 px-3 text-right text-[#FFB74D] font-bold">{h.downloadLoad.toLocaleString()}</td>
@@ -1110,8 +1116,9 @@ function OutputPanel({
                         <td className="py-2 px-3 text-right text-zinc-400">{h.height > 0 ? `${h.height.toFixed(3)}"` : '\u2014'}</td>
                         <td className="py-2 px-3 text-right text-zinc-400">{h.bearing > 0 ? `${h.bearing.toFixed(3)}"` : '\u2014'}</td>
                       </tr>
-                    ))
-                  ) : (
+                    );
+                    });
+                  })() : (
                     <tr>
                       <td colSpan={7} className="py-6 text-center text-zinc-500 text-[10px] font-mono">
                         No hangers match the current filters.{' '}
