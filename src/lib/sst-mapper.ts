@@ -358,16 +358,17 @@ export function buildSSTPayload(
     : (rawSkew < 0 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
   // Slope angle — derived from Bottom Chord Slopes of the carried truss at the bearing end.
-  // bearingSide='left'  → first segment  → bottomChordSlopes[0]
-  // bearingSide='right' → last segment   → bottomChordSlopes[last]
-  // slopeType is the OPPOSITE sign of BC slope:
-  //   BC slope < 0 (falling) → SLOPE_TYPE_UP (1)
-  //   BC slope > 0 (rising)  → SLOPE_TYPE_DOWN (2)
-  //   BC slope = 0           → SLOPE_TYPE_NONE (0)
+  // SST HS only understands slope as "chord going downward into the connection".
+  // bearingSide='right' → last segment, keep sign as-is
+  // bearingSide='left'  → first segment, negate (mirror) so the sign matches SST convention
+  // Example: TRE segments [11.77, -11.77]
+  //   right bearing → -11.77 → slopeAngle=12, UP
+  //   left  bearing → 11.77 → negate → -11.77 → slopeAngle=12, UP
   const bcSlopes = carried.treData?.bottomChordSlopes;
-  const bcSlopeAtBearing = bcSlopes && bcSlopes.length > 0
+  const rawSlope = bcSlopes && bcSlopes.length > 0
     ? (carried.bearingSide === 'right' ? bcSlopes[bcSlopes.length - 1] : bcSlopes[0])
     : 0;
+  const bcSlopeAtBearing = carried.bearingSide === 'left' ? -rawSlope : rawSlope;
   const slopeAngle = Math.round(Math.abs(bcSlopeAtBearing));
   const slopeType  = slopeAngle === 0
     ? SLOPE_TYPE_NONE
