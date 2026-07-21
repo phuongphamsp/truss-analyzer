@@ -1183,17 +1183,15 @@ function OutputPanel({
                       return (
                       <tr
                         key={`${h.model}-${i}`}
-                        className={`border-b border-[#1E293B]/40 transition-colors ${
-                          inStock
-                            ? 'bg-emerald-950/20 hover:bg-emerald-950/40'
-                            : 'hover:bg-[#1E293B]/20'
-                        }`}
+                        className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
                       >
-                        <td className="py-2 px-3 font-bold text-zinc-200 flex items-center gap-1.5">
+                        <td className="py-2 px-3 font-bold flex items-center gap-1.5">
                           {inStock && (
                             <PackageCheck className="w-3 h-3 text-emerald-400 shrink-0" title="In stock" />
                           )}
-                          {h.model}
+                          <span className={inStock ? 'text-emerald-400' : 'text-zinc-200'}>
+                            {h.model}
+                          </span>
                         </td>
                         <td className="py-2 px-3 text-right">
                           <span className={`text-[10px] font-semibold ${labelColor}`}>
