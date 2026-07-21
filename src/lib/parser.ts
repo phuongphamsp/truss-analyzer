@@ -653,7 +653,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number }> = [];
+   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -669,9 +669,10 @@ function parseHangers(text: string) {
         const xInches = parseFloat(parts[2]);
         // LG*T field layout (0-based after '='):
         // [0]=flag [1]=flag [2]=xInches [3]=flag [4]=label [5]=width [6]=heelHeight
-        // [7..13]=flags [14]=angle [15]=flag [16]=bearingLocation ...
-        const bearingLocation = parts.length > 16 ? parseFloat(parts[16]) : 0;
-        const angle           = parts.length > 14 ? parseFloat(parts[14]) : 90;
+        // [7][8][9][10][11]=flags [12]=skewAngle1 [13]=bearingSideFlag(0=left,1=right) [14]=angle [15]=bearingSideFlag2 [16]=bearingLocation ...
+        const bearingLocation  = parts.length > 16 ? parseFloat(parts[16]) : 0;
+        const angle            = parts.length > 14 ? parseFloat(parts[14]) : 90;
+        const bearingSideFlag  = parts.length > 13 ? parseInt(parts[13]) : 0; // 0=left, 1=right
         if (!isNaN(xInches)) {
           hangers.push({
             xFeet: xInches / 12,
@@ -681,6 +682,7 @@ function parseHangers(text: string) {
             heelHeight: parseFloat(parts[6]) || 0,
             bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation,
             angle: isNaN(angle) ? 90 : angle,
+            bearingSideFlag,
           });
         }
       }

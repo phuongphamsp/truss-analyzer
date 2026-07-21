@@ -348,8 +348,17 @@ export function buildSSTPayload(
   // If hangerAngle in [0, 180]  → skewAngle = hangerAngle - 90   (range: -90 to +90)
   // If hangerAngle in (180, 360] → skewAngle = hangerAngle - 270  (range: -90 to +90)
   // Negative skewAngle = Left, Positive = Right, Zero = None.
-  const hangerAngle = group.girder.treData?.hangers?.find(
-    h => Math.abs(h.xInches - (carried.localX ?? 0)) < 1.0
+  // Match hanger by xInches AND bearingSideFlag (0=left,1=right) to avoid
+  // picking the wrong entry when two hangers share the same xInches position
+  // but serve different bearing sides (e.g. skewed connections).
+  const targetSideFlag = carried.bearingSide === 'right' ? 1 : 0;
+  const hangers = group.girder.treData?.hangers ?? [];
+  const hangerAngle = (
+    hangers.find(h =>
+      Math.abs(h.xInches - (carried.localX ?? 0)) < 1.0 &&
+      h.bearingSideFlag === targetSideFlag
+    ) ??
+    hangers.find(h => Math.abs(h.xInches - (carried.localX ?? 0)) < 1.0)
   )?.angle ?? 90;
   const rawSkew   = hangerAngle <= 180 ? hangerAngle - 90 : hangerAngle - 270;
   const skewAngle = Math.round(Math.abs(rawSkew));
