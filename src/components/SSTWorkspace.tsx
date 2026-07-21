@@ -118,13 +118,14 @@ function SectionHeader({
 }
 
 /** How a field's value was obtained — drives the badge color */
-type SourceType = 'tre' | 'computed' | 'default' | 'unknown';
+type SourceType = 'tre' | 'tre-or-ifc' | 'computed' | 'default' | 'unknown';
 
 const SOURCE_META: Record<SourceType, { label: string; color: string }> = {
-  tre:      { label: 'TRE/IFC',   color: 'text-emerald-500' },
-  computed: { label: 'computed',  color: 'text-amber-400'   },
-  default:  { label: 'default',   color: 'text-zinc-500'    },
-  unknown:  { label: 'unknown',   color: 'text-rose-400'    },
+  tre:          { label: 'TRE',       color: 'text-emerald-500' },
+  'tre-or-ifc': { label: 'TRE/IFC',  color: 'text-emerald-500' },
+  computed:     { label: 'computed',  color: 'text-amber-400'   },
+  default:      { label: 'default',   color: 'text-zinc-500'    },
+  unknown:      { label: 'unknown',   color: 'text-rose-400'    },
 };
 
 function Row({ label, value, highlight, sourceType, sourceNote }: {
@@ -420,7 +421,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
-            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
+            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre-or-ifc" sourceNote="carried + girder label" />
           </div>
         )}
 
@@ -437,7 +438,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             <Row
               label="Lumber Species"
               value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
-              sourceType={girderSpeciesStr ? 'tre' : 'default'}
+              sourceType={girderSpeciesStr ? 'tre-or-ifc' : 'default'}
               sourceNote={girderSpeciesStr ? `from TRE: "${girderSpeciesStr}"` : 'default: DF'}
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
@@ -456,7 +457,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
+            <Row label="Member ID" value={girderLabel} sourceType="tre-or-ifc" sourceNote="girder label" />
           </div>
         )}
 
@@ -490,7 +491,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ? `Ply=${carried.treData.ply} from [ADDITIONAL TRUSS INFO]`
                 : 'not in TRE'}
             />
-            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
+            <Row label="Member ID" value={carriedLabel} sourceType="tre-or-ifc" sourceNote="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
