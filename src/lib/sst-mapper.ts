@@ -345,17 +345,17 @@ export function buildSSTPayload(
   const carriedMaterial = speciesStringToMaterial(carriedSpecies);
 
   // Skew angle — derived from LG*T field[14] (angle of carried truss relative to girder).
-  // 90° or 270° = perpendicular (no skew) → skewAngle=0, skewType=NONE.
-  // Other angles: skewAngle = |angle - 90| normalised to [0, 90].
-  // skewType: LEFT (1) when angle < 90 or angle > 270, RIGHT (2) otherwise.
+  // If hangerAngle in [0, 180]  → skewAngle = hangerAngle - 90   (range: -90 to +90)
+  // If hangerAngle in (180, 360] → skewAngle = hangerAngle - 270  (range: -90 to +90)
+  // Negative skewAngle = Left, Positive = Right, Zero = None.
   const hangerAngle = group.girder.treData?.hangers?.find(
     h => Math.abs(h.xInches - (carried.localX ?? 0)) < 1.0
   )?.angle ?? 90;
-  const normalised  = ((hangerAngle % 180) + 180) % 180; // fold 270→90, 315→135, etc.
-  const skewAngle   = Math.round(Math.abs(normalised - 90));
-  const skewType    = skewAngle === 0
+  const rawSkew   = hangerAngle <= 180 ? hangerAngle - 90 : hangerAngle - 270;
+  const skewAngle = Math.round(Math.abs(rawSkew));
+  const skewType  = skewAngle === 0
     ? SKEW_TYPE_NONE
-    : (normalised < 90 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
+    : (rawSkew < 0 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
   // Slope angle — derived from Bottom Chord Slopes of the carried truss at the bearing end.
   // bearingSide='left'  → first segment  → bottomChordSlopes[0]
