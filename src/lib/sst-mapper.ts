@@ -296,10 +296,10 @@ export function buildSSTPayload(
   );
 
   // kingHeight: use actual vertical segment height if king post found,
-  // otherwise fall back to girder bottom chord depth.
+  // otherwise 0 (no king post = no vertical height to report).
   const kingHeight = kingPost.hasKingPost
     ? kingPost.kingHeight
-    : girderDepth;
+    : 0;
 
   // Ply from [ADDITIONAL TRUSS INFO] Ply= field; default 1 if not found
   const girderPly = group.girder.treData?.ply ?? 1;
