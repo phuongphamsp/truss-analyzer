@@ -759,7 +759,7 @@ function OutputPanel({
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<OutputFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
-  const [sortByInstalledCost, setSortByInstalledCost] = useState(false);
+  const [sortByInstalledCost, setSortByInstalledCost] = useState(true);
 
   // Build effective payload with user overrides applied
   const effectivePayload: SSTPayload = {
