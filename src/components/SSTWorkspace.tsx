@@ -421,7 +421,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
-            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre-or-ifc" sourceNote="carried + girder label" />
+            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
         )}
 
@@ -439,7 +439,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Lumber Species"
               value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
               sourceType={girderSpeciesStr ? 'tre-or-ifc' : 'default'}
-              sourceNote={girderSpeciesStr ? `from TRE: "${girderSpeciesStr}"` : 'default: DF'}
+              sourceNote={girderSpeciesStr ? `TRE → IFC fallback: "${girderSpeciesStr}"` : 'default: DF'}
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
@@ -457,7 +457,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} sourceType="tre-or-ifc" sourceNote="girder label" />
+            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
           </div>
         )}
 
@@ -491,7 +491,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ? `Ply=${carried.treData.ply} from [ADDITIONAL TRUSS INFO]`
                 : 'not in TRE'}
             />
-            <Row label="Member ID" value={carriedLabel} sourceType="tre-or-ifc" sourceNote="carried label" />
+            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>

@@ -473,7 +473,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
                   : 'no TRE span data'}
               />
             )}
-            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre-or-ifc" sourceNote="carried + girder label" />
+            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
         )}
 
@@ -491,7 +491,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
               label="Lumber Species"
               value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
               sourceType={girderSpeciesStr ? 'tre-or-ifc' : 'default'}
-              sourceNote={girderSpeciesStr ? `from TRE: "${girderSpeciesStr}"` : 'default: DF'}
+              sourceNote={girderSpeciesStr ? `TRE → IFC fallback: "${girderSpeciesStr}"` : 'default: DF'}
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
@@ -502,7 +502,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
                 <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} sourceType="tre-or-ifc" sourceNote="girder label" />
+            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
             {!isTruss && (
               <Row label="Top Chord" value={cm.topChord === 1 ? 'Single' : cm.topChord === 2 ? 'Double' : 'N/A'} />
             )}
@@ -532,7 +532,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
             <Row label="Number of Plies" value={String(cd.ply)} sourceType="default" sourceNote="not in TRE" />
-            <Row label="Member ID" value={carriedLabel} sourceType="tre-or-ifc" sourceNote="carried label" />
+            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
             <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
             <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
