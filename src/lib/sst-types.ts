@@ -188,6 +188,7 @@ export interface SSTHangerResult {
   height: number;
   bearing: number;
   cost: number;
+  installedCost: number;  // h.ici: Installed Cost Index (lower = cheaper); 0 = unknown
   series: string;
   sku: string;
 }

@@ -91,6 +91,7 @@ function parseResponse(data: Record<string, unknown>): SSTAPIResponse {
     height: (h.hSize as number) ?? 0,
     bearing: (h.bSize as number) ?? 0,
     cost: (h.msrp as number) ?? 0,
+    installedCost: (h.ici as number) ?? 0,
     series: (h.catalog as string) || '',
     sku: (h.modelID as string) || '',
   }));

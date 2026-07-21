@@ -704,6 +704,16 @@ const EMPTY_FILTERS: OutputFilters = {
   maxHeight: '',
 };
 
+/** Convert ICI (Installed Cost Index) to a human-readable label matching SST UI */
+function installedCostLabel(ici: number): string {
+  if (ici <= 0) return '—';
+  if (ici <= 100) return 'Lowest';
+  if (ici <= 200) return 'Low';
+  if (ici <= 300) return 'Medium';
+  return 'High';
+}
+
+
 function applyFilters(hangers: SSTHangerResult[], f: OutputFilters): SSTHangerResult[] {
   return hangers.filter((h) => {
     if (f.model && !h.model.toLowerCase().includes(f.model.toLowerCase())) return false;
@@ -745,6 +755,7 @@ function OutputPanel({
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<OutputFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  const [sortByInstalledCost, setSortByInstalledCost] = useState(false);
 
   // Build effective payload with user overrides applied
   const effectivePayload: SSTPayload = {
@@ -788,7 +799,15 @@ function OutputPanel({
   }, [runQuery]);
 
   const allHangers = result?.success ? result.hangers : [];
-  const filtered = applyFilters(allHangers, filters);
+  const filtered = (() => {
+    const f = applyFilters(allHangers, filters);
+    if (!sortByInstalledCost) return f;
+    return [...f].sort((a, b) => {
+      const aVal = a.installedCost > 0 ? a.installedCost : Infinity;
+      const bVal = b.installedCost > 0 ? b.installedCost : Infinity;
+      return aVal - bVal;
+    });
+  })();
   const hasActiveFilters = !isFiltersEmpty(filters);
 
   const setFilter = <K extends keyof OutputFilters>(key: K, val: string) =>
@@ -1029,17 +1048,36 @@ function OutputPanel({
           <div className="border border-[#1E293B] bg-[#0F111A] rounded overflow-hidden">
             <div className="px-3 py-2 bg-[#1A1B26] border-b border-[#1E293B]/60 flex items-center justify-between">
               <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-wider">Results</span>
-              <span className="text-[9px] font-mono text-zinc-500">
-                {hasActiveFilters
-                  ? `${filtered.length} of ${allHangers.length} entries`
-                  : `${allHangers.length} entries`}
-              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setSortByInstalledCost((v) => !v)}
+                  className={`text-[9px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                    sortByInstalledCost
+                      ? 'border-emerald-500/60 text-emerald-400 bg-emerald-950/40'
+                      : 'border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-500'
+                  }`}
+                >
+                  {sortByInstalledCost ? '↑ Installed Cost' : 'Sort: Installed Cost'}
+                </button>
+                <span className="text-[9px] font-mono text-zinc-500">
+                  {hasActiveFilters
+                    ? `${filtered.length} of ${allHangers.length} entries`
+                    : `${allHangers.length} entries`}
+                </span>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[11px] font-mono">
                 <thead>
                   <tr className="text-[9px] uppercase text-zinc-500 border-b border-[#1E293B] bg-[#12131C]">
                     <th className="py-2 px-3">Model</th>
+                    <th
+                      className="py-2 px-3 text-right cursor-pointer select-none hover:text-emerald-400 transition-colors"
+                      onClick={() => setSortByInstalledCost((v) => !v)}
+                      title="Sort by Installed Cost"
+                    >
+                      Installed Cost{sortByInstalledCost ? ' ↑' : ''}
+                    </th>
                     <th className="py-2 px-3 text-right">Download (lb)</th>
                     <th className="py-2 px-3 text-right">Uplift (lb)</th>
                     <th className="py-2 px-3 text-right">Width</th>
@@ -1055,6 +1093,17 @@ function OutputPanel({
                         className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
                       >
                         <td className="py-2 px-3 font-bold text-zinc-200">{h.model}</td>
+                        <td className="py-2 px-3 text-right">
+                          <span className={`text-[10px] font-semibold ${
+                            installedCostLabel(h.installedCost) === 'Lowest' ? 'text-emerald-400' :
+                            installedCostLabel(h.installedCost) === 'Low'    ? 'text-green-400' :
+                            installedCostLabel(h.installedCost) === 'Medium' ? 'text-yellow-400' :
+                            installedCostLabel(h.installedCost) === 'High'   ? 'text-red-400' :
+                            'text-zinc-500'
+                          }`}>
+                            {installedCostLabel(h.installedCost)}
+                          </span>
+                        </td>
                         <td className="py-2 px-3 text-right text-[#FFB74D] font-bold">{h.downloadLoad.toLocaleString()}</td>
                         <td className="py-2 px-3 text-right text-sky-400">{h.upliftLoad.toLocaleString()}</td>
                         <td className="py-2 px-3 text-right text-zinc-400">{h.width > 0 ? `${h.width.toFixed(3)}"` : '\u2014'}</td>
@@ -1064,7 +1113,7 @@ function OutputPanel({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-zinc-500 text-[10px] font-mono">
+                      <td colSpan={7} className="py-6 text-center text-zinc-500 text-[10px] font-mono">
                         No hangers match the current filters.{' '}
                         <button onClick={() => setFilters(EMPTY_FILTERS)} className="text-cyan-400 hover:text-cyan-300 underline">
                           Clear filters
