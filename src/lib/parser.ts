@@ -669,9 +669,9 @@ function parseHangers(text: string) {
         const xInches = parseFloat(parts[2]);
         // LG*T field layout (0-based after '='):
         // [0]=flag [1]=flag [2]=xInches [3]=flag [4]=label [5]=width [6]=heelHeight
-        // [7][8][9][10][11]=flags [12]=angle [13]=flag [14]=bearingLocation [15]=flag [16]=bearingLocation2 ...
-        const bearingLocation = parts.length > 14 ? parseFloat(parts[14]) : 0;
-        const angle           = parts.length > 12 ? parseFloat(parts[12]) : 90;
+        // [7..13]=flags [14]=angle [15]=flag [16]=bearingLocation ...
+        const bearingLocation = parts.length > 16 ? parseFloat(parts[16]) : 0;
+        const angle           = parts.length > 14 ? parseFloat(parts[14]) : 90;
         if (!isNaN(xInches)) {
           hangers.push({
             xFeet: xInches / 12,
