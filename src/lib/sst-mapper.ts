@@ -382,6 +382,7 @@ export function buildSSTPayload(
     loads: { load, uplift },
     angle: {
       skewAngle,
+      skewRaw: Math.round(rawSkew),
       skewType,
       slopeAngle,
       slopeType,

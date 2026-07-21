@@ -116,7 +116,8 @@ export const SLOPE_TYPE_DOWN = 2;
 // ---------------------------------------------------------------------------
 
 export interface SSTAngle {
-  skewAngle: number;
+  skewAngle: number;   // magnitude (always >= 0), sent to SST API
+  skewRaw: number;     // signed value (-90 to +90), used for UI display
   skewType: number;
   slopeAngle: number;
   slopeType: number;
