@@ -750,12 +750,18 @@ function OutputPanel({
   viewMode,
   onViewChange,
   overrides,
+  inventory,
+  onInventoryChange,
+  onHangersLoaded,
 }: {
   payload: SSTPayload;
   carriedLabel: string;
   viewMode: ViewMode;
   onViewChange: (mode: ViewMode) => void;
   overrides: JobOverrides;
+  inventory: ParsedInventory | null;
+  onInventoryChange: (inv: ParsedInventory | null) => void;
+  onHangersLoaded?: (hangers: SSTHangerResult[]) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SSTAPIResponse | null>(null);
@@ -763,7 +769,6 @@ function OutputPanel({
   const [filters, setFilters] = useState<OutputFilters>(EMPTY_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
   const [sortByInstalledCost, setSortByInstalledCost] = useState(true);
-  const [inventory, setInventory] = useState<ParsedInventory | null>(null);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [filterInStockOnly, setFilterInStockOnly] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -796,6 +801,7 @@ function OutputPanel({
       console.log('[SST] Response:', res);
       setResult(res);
       if (!res.success) setError(res.error ?? 'Unknown error');
+      else if (onHangersLoaded) onHangersLoaded(res.hangers);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -833,10 +839,10 @@ function OutputPanel({
     setInventoryError(null);
     try {
       const parsed = await loadInventoryFile(file);
-      setInventory(parsed);
+      onInventoryChange(parsed);
     } catch (err) {
       setInventoryError(err instanceof Error ? err.message : 'Failed to parse inventory file');
-      setInventory(null);
+      onInventoryChange(null);
     }
     // reset input so same file can be re-imported
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -945,7 +951,7 @@ function OutputPanel({
               {filterInStockOnly ? 'In Stock Only ✓' : 'Show In Stock Only'}
             </button>
             <button
-              onClick={() => { setInventory(null); setFilterInStockOnly(false); setInventoryError(null); }}
+              onClick={() => { onInventoryChange(null); setFilterInStockOnly(false); setInventoryError(null); }}
               className="ml-auto text-[9px] text-zinc-600 hover:text-zinc-400 transition-colors flex items-center gap-0.5"
               title="Remove inventory"
             >
@@ -1240,9 +1246,12 @@ function OutputPanel({
 interface SSTWorkspaceProps {
   group: GirderGroup;
   selectedCarried: CarriedTruss;
+  inventory: ParsedInventory | null;
+  onInventoryChange: (inv: ParsedInventory | null) => void;
+  onHangersLoaded?: (girderId: string, carriedId: string, hangers: SSTHangerResult[]) => void;
 }
 
-export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
+export function SSTWorkspace({ group, selectedCarried, inventory, onInventoryChange, onHangersLoaded }: SSTWorkspaceProps) {
   const payload = buildSSTPayload(group, selectedCarried);
   const [viewMode, setViewMode] = useState<ViewMode>('output-only');
 
@@ -1316,6 +1325,11 @@ export function SSTWorkspace({ group, selectedCarried }: SSTWorkspaceProps) {
             viewMode={viewMode}
             onViewChange={setViewMode}
             overrides={overrides}
+            inventory={inventory}
+            onInventoryChange={onInventoryChange}
+            onHangersLoaded={onHangersLoaded
+              ? (hangers) => onHangersLoaded(group.girder.id, selectedCarried.instance.id, hangers)
+              : undefined}
           />
         </div>
       )}

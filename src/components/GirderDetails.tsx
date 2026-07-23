@@ -16,12 +16,17 @@ import {
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
 import { SSTWorkspace } from './SSTWorkspace';
+import type { ParsedInventory } from '../lib/inventory';
+import type { SSTHangerResult } from '../lib/sst-types';
 
 interface GirderDetailsProps {
     group: GirderGroup | null;
+    inventory: ParsedInventory | null;
+    onInventoryChange: (inv: ParsedInventory | null) => void;
+    onHangersLoaded?: (girderId: string, carriedId: string, hangers: SSTHangerResult[]) => void;
 }
 
-export function GirderDetails({ group }: GirderDetailsProps) {
+export function GirderDetails({ group, inventory, onInventoryChange, onHangersLoaded }: GirderDetailsProps) {
     const [selectedCarriedId, setSelectedCarriedId] = useState<string | null>(null);
     const [sstMode, setSstMode] = useState(false);
 
@@ -198,7 +203,13 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                 </div>
 
                 {sstMode && selectedCarried ? (
-                    <SSTWorkspace group={group} selectedCarried={selectedCarried} />
+                    <SSTWorkspace
+                      group={group}
+                      selectedCarried={selectedCarried}
+                      inventory={inventory}
+                      onInventoryChange={onInventoryChange}
+                      onHangersLoaded={onHangersLoaded}
+                    />
                 ) : (
                 <>
                 {/* Split workspace area */}

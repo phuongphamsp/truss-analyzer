@@ -3,11 +3,14 @@ import { FileUpload } from './components/FileUpload';
 import { LogPanel } from './components/LogPanel';
 import { GirderList } from './components/GirderList';
 import { GirderDetails } from './components/GirderDetails';
-import { ExportTab } from './components/ExportTab';
+import { JobSummaryTable } from './components/JobSummaryTable';
+import type { HangerResultsMap } from './components/JobSummaryTable';
 import { GirderGroup, LogEntry } from './types';
 import { analyzeFiles } from './lib/parser';
-import { Cpu, Download } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
 import { cn } from './lib/utils';
+import type { ParsedInventory } from './lib/inventory';
+import type { SSTHangerResult } from './lib/sst-types';
 
 import t07Raw from '../t07.tre.txt?raw';
 import t02Raw from '../t02.tre.txt?raw';
@@ -19,7 +22,18 @@ export default function App() {
   ]);
   const [girders, setGirders] = useState<GirderGroup[]>([]);
   const [selectedGirderId, setSelectedGirderId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'analyzer' | 'export'>('analyzer');
+  const [activeTab, setActiveTab] = useState<'analyzer' | 'summary'>('analyzer');
+
+  // Shared inventory state (lifted from SSTWorkspace so JobSummaryTable can use it)
+  const [inventory, setInventory] = useState<ParsedInventory | null>(null);
+
+  // Map of hanger results per connection: key = `${girderId}::${carriedInstanceId}`
+  const [hangerResultsMap, setHangerResultsMap] = useState<HangerResultsMap>({});
+
+  const handleHangersLoaded = useCallback((girderId: string, carriedId: string, hangers: SSTHangerResult[]) => {
+    const key = `${girderId}::${carriedId}`;
+    setHangerResultsMap(prev => ({ ...prev, [key]: hangers }));
+  }, []);
 
   const handleLog = useCallback((entry: Omit<LogEntry, 'id'|'timestamp'>) => {
       setLogs(prev => [...prev, { ...entry, id: Math.random().toString(36).substring(2, 9), timestamp: new Date() }]);
@@ -27,6 +41,7 @@ export default function App() {
 
   const handleAnalyze = useCallback((extractedGirders: GirderGroup[]) => {
       setGirders(extractedGirders);
+      setHangerResultsMap({});  // reset hanger results when new project is loaded
       if (extractedGirders.length > 0) {
           setSelectedGirderId(extractedGirders[0].girder.id);
       } else {
@@ -69,6 +84,9 @@ export default function App() {
 
   const selectedGirder = girders.find(g => g.girder.id === selectedGirderId) || null;
 
+  // Count resolved connections for the tab badge
+  const resolvedCount = Object.keys(hangerResultsMap).length;
+
   return (
     <div className="h-screen w-full bg-[#E4E3E0] text-[#141414] font-sans flex flex-col overflow-hidden select-none">
         <header className="h-14 border-b border-[#141414] flex items-center justify-between px-6 bg-[#D4D3D0] shrink-0">
@@ -76,12 +94,46 @@ export default function App() {
                 <div className="w-8 h-8 bg-[#141414] text-white flex items-center justify-center font-bold text-lg italic">T</div>
                 {/* App name to be added later */}
             </div>
+            {/* Tab bar */}
+            <div className="flex items-center gap-1">
+                <button
+                    onClick={() => setActiveTab('analyzer')}
+                    className={cn(
+                        'px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-colors',
+                        activeTab === 'analyzer'
+                            ? 'bg-[#141414] text-white'
+                            : 'text-[#141414] hover:bg-[#141414]/10'
+                    )}
+                >
+                    Analyzer
+                </button>
+                <button
+                    onClick={() => setActiveTab('summary')}
+                    className={cn(
+                        'flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-colors',
+                        activeTab === 'summary'
+                            ? 'bg-[#141414] text-white'
+                            : 'text-[#141414] hover:bg-[#141414]/10'
+                    )}
+                >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    Job Summary
+                    {resolvedCount > 0 && (
+                        <span className={cn(
+                            'text-[8px] font-black px-1.5 py-0.5 rounded-full',
+                            activeTab === 'summary' ? 'bg-white text-[#141414]' : 'bg-[#141414] text-white'
+                        )}>
+                            {resolvedCount}
+                        </span>
+                    )}
+                </button>
+            </div>
             <div className="flex items-center space-x-2">
             </div>
         </header>
 
         <main className="flex-1 flex overflow-hidden">
-            {/* Left Sidebar */}
+            {/* Left Sidebar — always visible */}
             <aside className="w-56 border-r border-[#141414] shrink-0 flex flex-col bg-[#EDEDED]">
                 <div className="border-b border-[#141414] bg-[#F2F2F2]">
                     <FileUpload onAnalyze={handleAnalyze} onLog={handleLog} />
@@ -90,16 +142,33 @@ export default function App() {
                     <GirderList 
                         girders={girders} 
                         selectedId={selectedGirderId}
-                        onSelect={setSelectedGirderId} 
+                        onSelect={(id) => { setSelectedGirderId(id); setActiveTab('analyzer'); }} 
                     />
                 </div>
             </aside>
 
             {/* Main Content Area */}
             <section className="flex-1 flex flex-col min-w-0 bg-[#DEDCD7]">
-                <div className="flex-1 flex overflow-hidden">
-                    <GirderDetails group={selectedGirder} />
-                </div>
+                {activeTab === 'analyzer' && (
+                    <div className="flex-1 flex overflow-hidden">
+                        <GirderDetails
+                            group={selectedGirder}
+                            inventory={inventory}
+                            onInventoryChange={setInventory}
+                            onHangersLoaded={handleHangersLoaded}
+                        />
+                    </div>
+                )}
+                {activeTab === 'summary' && (
+                    <div className="flex-1 flex overflow-hidden">
+                        <JobSummaryTable
+                            girders={girders}
+                            hangerResultsMap={hangerResultsMap}
+                            inventory={inventory}
+                            onInventoryChange={setInventory}
+                        />
+                    </div>
+                )}
             </section>
         </main>
 
