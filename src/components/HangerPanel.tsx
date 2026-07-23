@@ -236,7 +236,7 @@ function BatchResultsView({ results }: BatchResultsViewProps) {
 /** Decode SST enum integers to readable labels */
 const MATERIAL_LABELS: Record<number, string> = {
   1: 'Solid Sawn', 2: 'Glulam', 3: 'LSL', 4: 'LVL',
-  5: 'Truss', 6: 'I-Joist', 7: 'Floor Truss', 10: 'Concrete', 11: 'Steel',
+  5: 'Truss', 6: 'I-Joist', 7: 'Truss', 10: 'Concrete', 11: 'Steel',
 };
 
 /** Lumber Species labels keyed by SST material code (truss species variant) */
