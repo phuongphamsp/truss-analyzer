@@ -18,10 +18,6 @@ import type { GirderGroup, CarriedTruss, TreData } from '../types';
 import type { SSTPayload, SSTCarriedMember, SSTCarryingMember } from './sst-types';
 import {
   MATERIAL_TRUSS,
-  MATERIAL_TRUSS_DF,
-  MATERIAL_TRUSS_HF,
-  MATERIAL_TRUSS_SP,
-  MATERIAL_TRUSS_SPF,
   ANSITPI_END,
   ANSITPI_INTERIOR,
   BUILDING_CODE_IRC2018,
@@ -50,31 +46,19 @@ import {
 /**
  * Map a lumber species string (from TRE file) to the SST API material code.
  *
- * TRE species strings → SST material codes:
- *   "DF"  (Douglas Fir)     → 5
- *   "HF"  (Hem Fir)         → 6
- *   "SP"  (Southern Pine)   → 7
- *   "SPF" (Spruce Pine Fir) → 8
+ * For truss members, SST uses material = 5 (Truss) regardless of species.
+ * Species (SP, DF, HF, SPF) is encoded separately via the Lumber Species
+ * dropdown in the SST UI — it is NOT a different material type.
  *
- * Matching is case-insensitive and checks if the species token appears
- * anywhere in the spec string (e.g. "2x4 No.2 SP" → 7).
- * Falls back to MATERIAL_TRUSS (5 = DF) if species is unknown.
+ * material codes:
+ *   5 = Truss  (all species: DF, SP, HF, SPF)
+ *   7 = Floor Truss  ← different product type, not a species variant
+ *
+ * Always returns MATERIAL_TRUSS (5) for truss members.
+ * The species string is kept for display purposes only (Lumber Species row).
  */
-function speciesStringToMaterial(speciesOrSpec: string | undefined): number {
-  if (!speciesOrSpec) return MATERIAL_TRUSS;
-  const s = speciesOrSpec.trim().toUpperCase();
-  // Check longest token first to avoid "SP" matching inside "SPF"
-  if (s === 'SPF' || s.endsWith(' SPF')) return MATERIAL_TRUSS_SPF;
-  if (s === 'SP'  || s.endsWith(' SP'))  return MATERIAL_TRUSS_SP;
-  if (s === 'HF'  || s.endsWith(' HF'))  return MATERIAL_TRUSS_HF;
-  if (s === 'DF'  || s.endsWith(' DF'))  return MATERIAL_TRUSS_DF;
-  // Fallback: scan for token anywhere in the string
-  const tokens = s.split(/[\s,]+/);
-  if (tokens.includes('SPF')) return MATERIAL_TRUSS_SPF;
-  if (tokens.includes('SP'))  return MATERIAL_TRUSS_SP;
-  if (tokens.includes('HF'))  return MATERIAL_TRUSS_HF;
-  if (tokens.includes('DF'))  return MATERIAL_TRUSS_DF;
-  return MATERIAL_TRUSS; // default: DF (5)
+function speciesStringToMaterial(_speciesOrSpec: string | undefined): number {
+  return MATERIAL_TRUSS; // always 5 — Truss (species is a separate field in SST UI)
 }
 
 /**
