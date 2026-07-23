@@ -9,15 +9,17 @@
  * Có nút Export Excel.
  */
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import type { GirderGroup } from '../types';
 import type { SSTHangerResult } from '../lib/sst-types';
 import type { ParsedInventory } from '../lib/inventory';
 import { isInStock } from '../lib/inventory';
-import { Package, PackageCheck, Download, AlertCircle, FileSpreadsheet } from 'lucide-react';
+import { Package, PackageCheck, Download, AlertCircle, FileSpreadsheet, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { loadInventoryFile } from '../lib/inventory';
+import { buildSSTPayload } from '../lib/sst-mapper';
+import { submitToSST, hasSSTToken } from '../lib/sst-api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,11 +90,24 @@ function fmtLoad(lb: number): string {
 // Main component
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Batch query state
+// ---------------------------------------------------------------------------
+
+interface BatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  running: boolean;
+  aborted: boolean;
+}
+
 interface JobSummaryTableProps {
   girders: GirderGroup[];
   hangerResultsMap: HangerResultsMap;
   inventory: ParsedInventory | null;
   onInventoryChange: (inv: ParsedInventory | null) => void;
+  onHangersLoaded: (girderId: string, carriedId: string, hangers: SSTHangerResult[]) => void;
 }
 
 export function JobSummaryTable({
@@ -100,8 +115,88 @@ export function JobSummaryTable({
   hangerResultsMap,
   inventory,
   onInventoryChange,
+  onHangersLoaded,
 }: JobSummaryTableProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef(false);
+
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const [noToken, setNoToken] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Batch auto-query: run on mount for all connections not yet queried
+  // ---------------------------------------------------------------------------
+
+  const runBatchQuery = useCallback(async () => {
+    if (!hasSSTToken()) {
+      setNoToken(true);
+      return;
+    }
+    setNoToken(false);
+
+    // Collect connections that haven't been queried yet
+    const pending: Array<{ girderId: string; carriedId: string; group: GirderGroup; carriedIdx: number }> = [];
+    for (const group of girders) {
+      for (let i = 0; i < group.carriedTrusses.length; i++) {
+        const carried = group.carriedTrusses[i];
+        const key = `${group.girder.id}::${carried.instance.id}`;
+        if (!hangerResultsMap[key] && (carried.downReaction ?? 0) > 0) {
+          pending.push({ girderId: group.girder.id, carriedId: carried.instance.id, group, carriedIdx: i });
+        }
+      }
+    }
+
+    if (pending.length === 0) return;
+
+    abortRef.current = false;
+    setBatchProgress({ total: pending.length, completed: 0, failed: 0, running: true, aborted: false });
+
+    let completed = 0;
+    let failed = 0;
+
+    for (const item of pending) {
+      if (abortRef.current) {
+        setBatchProgress(prev => prev ? { ...prev, running: false, aborted: true } : null);
+        return;
+      }
+
+      const carried = item.group.carriedTrusses[item.carriedIdx];
+      try {
+        const payload = buildSSTPayload(item.group, carried);
+        const res = await submitToSST(payload);
+        if (res.success) {
+          onHangersLoaded(item.girderId, item.carriedId, res.hangers);
+        } else {
+          failed++;
+          // If 401/403, abort the whole batch — token is invalid
+          if (res.error?.includes('401') || res.error?.includes('403')) {
+            setBatchProgress(prev => prev ? { ...prev, running: false, aborted: true, failed: failed + (pending.length - completed - 1) } : null);
+            setNoToken(true);
+            return;
+          }
+        }
+      } catch {
+        failed++;
+      }
+
+      completed++;
+      setBatchProgress(prev => prev ? { ...prev, completed, failed, running: completed < pending.length } : null);
+
+      // 800ms delay between calls to avoid rate limiting (skip after last)
+      if (completed < pending.length && !abortRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+    }
+
+    setBatchProgress(prev => prev ? { ...prev, running: false } : null);
+  }, [girders, hangerResultsMap, onHangersLoaded]);
+
+  // Auto-run on mount
+  useEffect(() => {
+    runBatchQuery();
+    return () => { abortRef.current = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally run only on mount (tab open)
 
   // Build the selected-hanger rows for all connections
   const rows: SelectedHanger[] = useMemo(() => {
@@ -221,6 +316,12 @@ export function JobSummaryTable({
     XLSX.writeFile(wb, `hanger_schedule_${timestamp}.xlsx`);
   };
 
+  const isQuerying = batchProgress?.running === true;
+  const batchDone = batchProgress && !batchProgress.running;
+  const batchPct = batchProgress && batchProgress.total > 0
+    ? Math.round((batchProgress.completed / batchProgress.total) * 100)
+    : 0;
+
   return (
     <div className="flex-1 flex flex-col bg-[#0C0D14] overflow-hidden text-zinc-200">
       {/* Header */}
@@ -231,12 +332,6 @@ export function JobSummaryTable({
           <span className="text-[9px] font-mono text-zinc-500">
             {resolvedConnections}/{totalConnections} connections resolved
           </span>
-          {pendingConnections > 0 && (
-            <span className="flex items-center gap-1 text-[9px] font-mono text-amber-400">
-              <AlertCircle className="w-3 h-3" />
-              {pendingConnections} pending SST query
-            </span>
-          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -264,6 +359,33 @@ export function JobSummaryTable({
             </>
           )}
 
+          {/* Re-query button (shown when not running) */}
+          {!isQuerying && (
+            <button
+              onClick={runBatchQuery}
+              disabled={!hasSSTToken()}
+              className={cn(
+                'flex items-center gap-1.5 px-2.5 py-1 rounded text-[9px] font-mono border transition-colors',
+                hasSSTToken()
+                  ? 'border-cyan-700 text-cyan-400 hover:border-cyan-500 hover:text-cyan-200'
+                  : 'border-zinc-700 text-zinc-600 cursor-not-allowed'
+              )}
+              title="Re-query SST for all connections"
+            >
+              Re-query All
+            </button>
+          )}
+
+          {/* Stop button (shown while running) */}
+          {isQuerying && (
+            <button
+              onClick={() => { abortRef.current = true; }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[9px] font-mono border border-red-700 text-red-400 hover:border-red-500 transition-colors"
+            >
+              Stop
+            </button>
+          )}
+
           {/* Export Excel */}
           <button
             onClick={handleExportExcel}
@@ -280,6 +402,52 @@ export function JobSummaryTable({
           </button>
         </div>
       </div>
+
+      {/* No token warning */}
+      {noToken && (
+        <div className="bg-red-950/40 border-b border-red-700/40 px-5 py-2 shrink-0 flex items-center gap-2">
+          <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+          <span className="text-[9px] font-mono text-red-400">
+            No SST token found. Set the Bearer token in the SST Workspace (Analyzer tab) first, then re-query.
+          </span>
+        </div>
+      )}
+
+      {/* Batch progress bar */}
+      {batchProgress && (
+        <div className="bg-[#0F111A] border-b border-[#1E293B] px-5 py-2 shrink-0">
+          <div className="flex items-center gap-3 mb-1.5">
+            {isQuerying ? (
+              <Loader2 className="w-3 h-3 text-cyan-400 animate-spin shrink-0" />
+            ) : batchDone && batchProgress.failed === 0 ? (
+              <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+            )}
+            <span className="text-[9px] font-mono text-zinc-400">
+              {isQuerying
+                ? `Querying SST API… ${batchProgress.completed}/${batchProgress.total}`
+                : batchProgress.aborted
+                  ? `Stopped — ${batchProgress.completed}/${batchProgress.total} completed`
+                  : `Done — ${batchProgress.completed}/${batchProgress.total} queried${batchProgress.failed > 0 ? `, ${batchProgress.failed} failed` : ''}`
+              }
+            </span>
+            {batchProgress.failed > 0 && (
+              <span className="text-[9px] font-mono text-red-400">{batchProgress.failed} failed</span>
+            )}
+          </div>
+          {/* Progress bar */}
+          <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all duration-300',
+                isQuerying ? 'bg-cyan-500' : batchProgress.failed > 0 ? 'bg-amber-500' : 'bg-emerald-500'
+              )}
+              style={{ width: `${batchPct}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Stats bar */}
       <div className="bg-[#0F111A] border-b border-[#1E293B] px-5 py-2 shrink-0 flex items-center gap-6 flex-wrap">

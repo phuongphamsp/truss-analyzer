@@ -166,6 +166,7 @@ export default function App() {
                             hangerResultsMap={hangerResultsMap}
                             inventory={inventory}
                             onInventoryChange={setInventory}
+                            onHangersLoaded={handleHangersLoaded}
                         />
                     </div>
                 )}
