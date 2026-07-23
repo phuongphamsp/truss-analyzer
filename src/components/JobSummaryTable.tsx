@@ -237,7 +237,6 @@ export function JobSummaryTable({
   const totalConnections = rows.length;
   const resolvedConnections = rows.filter((r) => r.hanger !== null).length;
   const pendingConnections = totalConnections - resolvedConnections;
-  const totalCost = rows.reduce((sum, r) => sum + (r.hanger?.cost ?? 0), 0);
   const hasInventory = inventory !== null;
 
   // Handle inventory file import
@@ -459,12 +458,7 @@ export function JobSummaryTable({
           <span className="text-[9px] font-mono text-zinc-500 uppercase">Hangers Selected</span>
           <span className="text-[13px] font-bold text-emerald-400">{resolvedConnections}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] font-mono text-zinc-500 uppercase">Total MSRP</span>
-          <span className="text-[13px] font-bold text-amber-400">
-            {totalCost > 0 ? `$${totalCost.toFixed(2)}` : '—'}
-          </span>
-        </div>
+
         {hasInventory && (
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono text-zinc-500 uppercase">Selection Mode</span>
@@ -489,7 +483,6 @@ export function JobSummaryTable({
 
         {Array.from(byGirder.entries()).map(([girderId, gRows]) => {
           const girderLabel = gRows[0].girderLabel;
-          const girderCost = gRows.reduce((s, r) => s + (r.hanger?.cost ?? 0), 0);
           const girderResolved = gRows.filter((r) => r.hanger !== null).length;
 
           return (
@@ -504,12 +497,7 @@ export function JobSummaryTable({
                     {girderResolved}/{gRows.length} connections
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-mono text-zinc-500">Subtotal MSRP:</span>
-                  <span className="text-[11px] font-bold text-amber-400">
-                    {girderCost > 0 ? `$${girderCost.toFixed(2)}` : '—'}
-                  </span>
-                </div>
+
               </div>
 
               {/* Connections table */}
@@ -519,14 +507,11 @@ export function JobSummaryTable({
                     <tr className="text-[9px] uppercase text-zinc-500 border-b border-[#1E293B] bg-[#12131C]">
                       <th className="py-2 px-3">Carried Truss</th>
                       <th className="py-2 px-3 text-right">Offset X</th>
-                      <th className="py-2 px-3 text-right">Rxn ↓ (lb)</th>
-                      <th className="py-2 px-3 text-right">Uplift ↑ (lb)</th>
                       <th className="py-2 px-3">Hanger Model</th>
                       <th className="py-2 px-3 text-right">DL Cap (lb)</th>
                       <th className="py-2 px-3 text-right">UL Cap (lb)</th>
                       <th className="py-2 px-3 text-right">Width</th>
                       <th className="py-2 px-3 text-right">Height</th>
-                      <th className="py-2 px-3 text-right">MSRP</th>
                       <th className="py-2 px-3 text-center">Stock</th>
                       <th className="py-2 px-3">Selection</th>
                     </tr>
@@ -546,14 +531,6 @@ export function JobSummaryTable({
                         {/* Offset X */}
                         <td className="py-2 px-3 text-right text-zinc-400">
                           {fmtOffset(row.offsetX)}
-                        </td>
-
-                        {/* Reactions */}
-                        <td className="py-2 px-3 text-right font-bold text-[#FFB74D]">
-                          {fmtLoad(row.downReaction)}
-                        </td>
-                        <td className="py-2 px-3 text-right text-sky-400">
-                          {fmtLoad(row.upliftReaction)}
                         </td>
 
                         {/* Hanger model */}
@@ -593,11 +570,6 @@ export function JobSummaryTable({
                           {row.hanger && row.hanger.height > 0 ? `${row.hanger.height.toFixed(3)}"` : '—'}
                         </td>
 
-                        {/* MSRP */}
-                        <td className="py-2 px-3 text-right font-bold text-amber-400">
-                          {row.hanger && row.hanger.cost > 0 ? `$${row.hanger.cost.toFixed(2)}` : '—'}
-                        </td>
-
                         {/* In stock */}
                         <td className="py-2 px-3 text-center">
                           {row.hanger ? (
@@ -631,37 +603,14 @@ export function JobSummaryTable({
                     ))}
                   </tbody>
 
-                  {/* Girder subtotal */}
-                  {girderCost > 0 && (
-                    <tfoot>
-                      <tr className="border-t border-[#1E293B] bg-[#12131C]">
-                        <td colSpan={9} className="py-2 px-3 text-right text-[9px] font-bold text-zinc-500 uppercase tracking-wider">
-                          Girder {girderLabel} Subtotal
-                        </td>
-                        <td className="py-2 px-3 text-right font-bold text-amber-300">
-                          ${girderCost.toFixed(2)}
-                        </td>
-                        <td colSpan={2} />
-                      </tr>
-                    </tfoot>
-                  )}
+
                 </table>
               </div>
             </div>
           );
         })}
 
-        {/* Grand total */}
-        {totalCost > 0 && (
-          <div className="border border-amber-700/40 rounded bg-amber-950/20 px-5 py-3 flex items-center justify-between">
-            <span className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-              Total Job Hanger Cost (MSRP)
-            </span>
-            <span className="text-[18px] font-bold text-amber-400">
-              ${totalCost.toFixed(2)}
-            </span>
-          </div>
-        )}
+
       </div>
     </div>
   );
