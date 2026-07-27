@@ -277,7 +277,42 @@ export function JobSummaryTable({
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Hanger Schedule
+    // ── Style helpers ──────────────────────────────────────────────────────────
+    const HEADER_FILL = { patternType: 'solid' as const, fgColor: { rgb: '1E3A5F' } };
+    const HEADER_FONT = { bold: true, color: { rgb: 'FFFFFF' }, sz: 10 };
+    const TOTAL_FILL  = { patternType: 'solid' as const, fgColor: { rgb: '0F2A45' } };
+    const TOTAL_FONT  = { bold: true, color: { rgb: 'A0C4FF' }, sz: 10 };
+    const BORDER_THIN = {
+      top:    { style: 'thin' as const, color: { rgb: '334155' } },
+      bottom: { style: 'thin' as const, color: { rgb: '334155' } },
+      left:   { style: 'thin' as const, color: { rgb: '334155' } },
+      right:  { style: 'thin' as const, color: { rgb: '334155' } },
+    };
+    const BORDER_HEADER = {
+      top:    { style: 'medium' as const, color: { rgb: '0EA5E9' } },
+      bottom: { style: 'medium' as const, color: { rgb: '0EA5E9' } },
+      left:   { style: 'thin'   as const, color: { rgb: '0EA5E9' } },
+      right:  { style: 'thin'   as const, color: { rgb: '0EA5E9' } },
+    };
+
+    /** Apply header style + border to all cells in row 0, data border to rest */
+    function styleSheet(ws: XLSX.WorkSheet, numCols: number, numRows: number) {
+      for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (!ws[addr]) continue;
+          if (r === 0) {
+            ws[addr].s = { fill: HEADER_FILL, font: HEADER_FONT, border: BORDER_HEADER, alignment: { horizontal: 'center' } };
+          } else if (r === numRows - 1) {
+            ws[addr].s = { fill: TOTAL_FILL, font: TOTAL_FONT, border: BORDER_THIN, alignment: { horizontal: c === 0 ? 'left' : 'center' } };
+          } else {
+            ws[addr].s = { border: BORDER_THIN, alignment: { horizontal: c === 0 ? 'left' : 'center' } };
+          }
+        }
+      }
+    }
+
+    // ── Sheet 1: Hanger Schedule ───────────────────────────────────────────────
     const summaryData: (string | number)[][] = [
       ['Girder', 'Carried Truss', 'Offset X', 'Hanger Model', 'Download Cap (lb)', 'Uplift Cap (lb)', 'Width (in)', 'Height (in)', 'Bearing (in)', 'MSRP ($)', 'In Stock', 'Selection'],
     ];
@@ -306,20 +341,21 @@ export function JobSummaryTable({
       { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
       { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 20 },
     ];
+    styleSheet(ws1, 12, summaryData.length);
     XLSX.utils.book_append_sheet(wb, ws1, 'Hanger Schedule');
 
-    // Sheet 2: Model summary
+    // ── Sheet 2: Model Summary ─────────────────────────────────────────────────
     const modelData: (string | number)[][] = [
       ['Hanger Model', 'Qty', 'In Stock'],
     ];
     for (const item of modelSummary) {
       modelData.push([item.model, item.count, item.inStockCount > 0 ? item.inStockCount : '—']);
     }
-    modelData.push([]);
-    modelData.push(['TOTAL', modelSummary.reduce((s, m) => s + m.count, 0), '']);
+    modelData.push(['TOTAL', modelSummary.reduce((s, m) => s + m.count, 0), modelSummary.reduce((s, m) => s + m.inStockCount, 0) || '—']);
 
     const ws2 = XLSX.utils.aoa_to_sheet(modelData);
     ws2['!cols'] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }];
+    styleSheet(ws2, 3, modelData.length);
     XLSX.utils.book_append_sheet(wb, ws2, 'Model Summary');
 
     const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
@@ -623,38 +659,49 @@ export function JobSummaryTable({
 
         {/* ── Model Summary Table ── */}
         {modelSummary.length > 0 && (
-          <div className="border border-[#1E293B] rounded overflow-hidden">
-            <div className="bg-[#1A1B26] border-b border-[#1E293B] px-4 py-2 flex items-center gap-3">
-              <span className="text-[11px] font-bold text-zinc-100 uppercase tracking-wider">
+          <div className="border border-sky-800/50 rounded overflow-hidden shadow-lg shadow-sky-900/10">
+            {/* Header bar */}
+            <div className="bg-gradient-to-r from-sky-950 to-[#1A1B26] border-b border-sky-800/50 px-4 py-2.5 flex items-center gap-3">
+              <div className="w-1.5 h-4 rounded-sm bg-sky-500 shrink-0" />
+              <span className="text-[11px] font-bold text-sky-100 uppercase tracking-wider">
                 Hanger Model Summary
               </span>
-              <span className="text-[9px] font-mono text-zinc-500">
+              <span className="text-[9px] font-mono text-sky-400/70">
                 {modelSummary.length} model{modelSummary.length !== 1 ? 's' : ''} · {resolvedConnections} total hangers
               </span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[11px] font-mono">
                 <thead>
-                  <tr className="text-[9px] uppercase text-zinc-500 border-b border-[#1E293B] bg-[#12131C]">
-                    <th className="py-2 px-3">Hanger Model</th>
-                    <th className="py-2 px-3 text-right">Qty</th>
+                  <tr className="text-[9px] uppercase tracking-wider text-sky-300 border-b border-sky-800/50 bg-sky-950/60">
+                    <th className="py-2.5 px-4">Hanger Model</th>
+                    <th className="py-2.5 px-4 text-right">Qty</th>
                     {hasInventory && (
-                      <th className="py-2 px-3 text-right">In Stock</th>
+                      <th className="py-2.5 px-4 text-right">In Stock</th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {modelSummary.map(({ model, count, inStockCount }) => (
+                  {modelSummary.map(({ model, count, inStockCount }, idx) => (
                     <tr
                       key={model}
-                      className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
+                      className={cn(
+                        'border-b border-sky-900/30 transition-colors hover:bg-sky-900/20',
+                        idx % 2 === 0 ? 'bg-[#0C0D14]' : 'bg-sky-950/20'
+                      )}
                     >
-                      <td className="py-2 px-3 font-bold text-zinc-200">{model}</td>
-                      <td className="py-2 px-3 text-right text-zinc-200 font-bold">{count}</td>
+                      <td className="py-2 px-4">
+                        <span className="font-bold text-sky-100 bg-sky-900/40 px-2 py-0.5 rounded text-[10px] border border-sky-800/40">
+                          {model}
+                        </span>
+                      </td>
+                      <td className="py-2 px-4 text-right">
+                        <span className="font-bold text-white text-[13px]">{count}</span>
+                      </td>
                       {hasInventory && (
-                        <td className="py-2 px-3 text-right">
+                        <td className="py-2 px-4 text-right">
                           {inStockCount > 0
-                            ? <span className="text-emerald-400 font-bold">{inStockCount}</span>
+                            ? <span className="text-emerald-400 font-bold text-[12px]">{inStockCount}</span>
                             : <span className="text-zinc-600">—</span>
                           }
                         </td>
@@ -663,13 +710,13 @@ export function JobSummaryTable({
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-[#1E293B] bg-[#12131C]">
-                    <td className="py-2 px-3 text-[9px] uppercase text-zinc-500 font-bold">Total</td>
-                    <td className="py-2 px-3 text-right font-bold text-zinc-200">
+                  <tr className="border-t-2 border-sky-700/50 bg-sky-950/60">
+                    <td className="py-2.5 px-4 text-[9px] uppercase tracking-wider text-sky-400 font-bold">Total</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-white text-[14px]">
                       {modelSummary.reduce((s, m) => s + m.count, 0)}
                     </td>
                     {hasInventory && (
-                      <td className="py-2 px-3 text-right font-bold text-emerald-400">
+                      <td className="py-2.5 px-4 text-right font-bold text-emerald-400 text-[13px]">
                         {modelSummary.reduce((s, m) => s + m.inStockCount, 0) || '—'}
                       </td>
                     )}
