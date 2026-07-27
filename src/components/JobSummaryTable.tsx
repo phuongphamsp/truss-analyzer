@@ -239,6 +239,27 @@ export function JobSummaryTable({
   const pendingConnections = totalConnections - resolvedConnections;
   const hasInventory = inventory !== null;
 
+  // Total cost
+  const totalCost = useMemo(() => rows.reduce((s, r) => s + (r.hanger?.cost ?? 0), 0), [rows]);
+
+  // Model summary: count per hanger model
+  const modelSummary = useMemo(() => {
+    const map = new Map<string, { count: number; inStockCount: number }>();
+    for (const row of rows) {
+      if (!row.hanger) continue;
+      const model = row.hanger.model;
+      const existing = map.get(model) ?? { count: 0, inStockCount: 0 };
+      map.set(model, {
+        count: existing.count + 1,
+        inStockCount: existing.inStockCount + (row.isInStock ? 1 : 0),
+      });
+    }
+    // Sort by count descending
+    return Array.from(map.entries())
+      .sort((a, b) => b[1].count - a[1].count)
+      .map(([model, stats]) => ({ model, ...stats }));
+  }, [rows]);
+
   // Handle inventory file import
   const handleInventoryFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -310,6 +331,20 @@ export function JobSummaryTable({
     const ws2 = XLSX.utils.aoa_to_sheet(girderData);
     ws2['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Girder Summary');
+
+    // Sheet 3: Model summary
+    const modelData: (string | number)[][] = [
+      ['Hanger Model', 'Qty', 'In Stock'],
+    ];
+    for (const item of modelSummary) {
+      modelData.push([item.model, item.count, item.inStockCount > 0 ? item.inStockCount : '—']);
+    }
+    modelData.push([]);
+    modelData.push(['TOTAL', modelSummary.reduce((s, m) => s + m.count, 0), '']);
+
+    const ws3 = XLSX.utils.aoa_to_sheet(modelData);
+    ws3['!cols'] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'Model Summary');
 
     const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
     XLSX.writeFile(wb, `hanger_schedule_${timestamp}.xlsx`);
@@ -610,6 +645,64 @@ export function JobSummaryTable({
           );
         })}
 
+        {/* ── Model Summary Table ── */}
+        {modelSummary.length > 0 && (
+          <div className="border border-[#1E293B] rounded overflow-hidden">
+            <div className="bg-[#1A1B26] border-b border-[#1E293B] px-4 py-2 flex items-center gap-3">
+              <span className="text-[11px] font-bold text-zinc-100 uppercase tracking-wider">
+                Hanger Model Summary
+              </span>
+              <span className="text-[9px] font-mono text-zinc-500">
+                {modelSummary.length} model{modelSummary.length !== 1 ? 's' : ''} · {resolvedConnections} total hangers
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px] font-mono">
+                <thead>
+                  <tr className="text-[9px] uppercase text-zinc-500 border-b border-[#1E293B] bg-[#12131C]">
+                    <th className="py-2 px-3">Hanger Model</th>
+                    <th className="py-2 px-3 text-right">Qty</th>
+                    {hasInventory && (
+                      <th className="py-2 px-3 text-right">In Stock</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelSummary.map(({ model, count, inStockCount }) => (
+                    <tr
+                      key={model}
+                      className="border-b border-[#1E293B]/40 hover:bg-[#1E293B]/20 transition-colors"
+                    >
+                      <td className="py-2 px-3 font-bold text-zinc-200">{model}</td>
+                      <td className="py-2 px-3 text-right text-zinc-200 font-bold">{count}</td>
+                      {hasInventory && (
+                        <td className="py-2 px-3 text-right">
+                          {inStockCount > 0
+                            ? <span className="text-emerald-400 font-bold">{inStockCount}</span>
+                            : <span className="text-zinc-600">—</span>
+                          }
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-[#1E293B] bg-[#12131C]">
+                    <td className="py-2 px-3 text-[9px] uppercase text-zinc-500 font-bold">Total</td>
+                    <td className="py-2 px-3 text-right font-bold text-zinc-200">
+                      {modelSummary.reduce((s, m) => s + m.count, 0)}
+                    </td>
+                    {hasInventory && (
+                      <td className="py-2 px-3 text-right font-bold text-emerald-400">
+                        {modelSummary.reduce((s, m) => s + m.inStockCount, 0) || '—'}
+                      </td>
+                    )}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
