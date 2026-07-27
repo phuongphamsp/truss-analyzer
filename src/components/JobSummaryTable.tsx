@@ -277,17 +277,15 @@ export function JobSummaryTable({
   const handleExportExcel = () => {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Summary per connection
+    // Sheet 1: Hanger Schedule
     const summaryData: (string | number)[][] = [
-      ['Girder', 'Carried Truss', 'Offset X', 'Down Rxn (lb)', 'Uplift Rxn (lb)', 'Hanger Model', 'Download Cap (lb)', 'Uplift Cap (lb)', 'Width (in)', 'Height (in)', 'Bearing (in)', 'MSRP ($)', 'In Stock', 'Selection'],
+      ['Girder', 'Carried Truss', 'Offset X', 'Hanger Model', 'Download Cap (lb)', 'Uplift Cap (lb)', 'Width (in)', 'Height (in)', 'Bearing (in)', 'MSRP ($)', 'In Stock', 'Selection'],
     ];
     for (const row of rows) {
       summaryData.push([
         row.girderLabel,
         row.carriedLabel,
         fmtOffset(row.offsetX),
-        row.downReaction,
-        row.upliftReaction,
         row.hanger?.model ?? 'N/A — No SST results',
         row.hanger?.downloadLoad ?? '',
         row.hanger?.upliftLoad ?? '',
@@ -301,38 +299,16 @@ export function JobSummaryTable({
           : 'Pending',
       ]);
     }
-    // Totals row
-    summaryData.push([]);
-    summaryData.push(['', '', '', '', '', 'TOTAL HANGER COST', '', '', '', '', '', totalCost.toFixed(2), '', '']);
 
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-    // Column widths
     ws1['!cols'] = [
-      { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 },
+      { wch: 10 }, { wch: 14 }, { wch: 12 },
       { wch: 20 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 10 },
       { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 20 },
     ];
     XLSX.utils.book_append_sheet(wb, ws1, 'Hanger Schedule');
 
-    // Sheet 2: Per-girder summary
-    const girderData: (string | number)[][] = [
-      ['Girder', 'Connections', 'Resolved', 'Total MSRP ($)'],
-    ];
-    for (const [girderId, gRows] of byGirder) {
-      const label = gRows[0].girderLabel;
-      const resolved = gRows.filter((r) => r.hanger !== null).length;
-      const cost = gRows.reduce((s, r) => s + (r.hanger?.cost ?? 0), 0);
-      girderData.push([label, gRows.length, resolved, cost.toFixed(2)]);
-      void girderId;
-    }
-    girderData.push([]);
-    girderData.push(['TOTAL', totalConnections, resolvedConnections, totalCost.toFixed(2)]);
-
-    const ws2 = XLSX.utils.aoa_to_sheet(girderData);
-    ws2['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 16 }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Girder Summary');
-
-    // Sheet 3: Model summary
+    // Sheet 2: Model summary
     const modelData: (string | number)[][] = [
       ['Hanger Model', 'Qty', 'In Stock'],
     ];
@@ -342,9 +318,9 @@ export function JobSummaryTable({
     modelData.push([]);
     modelData.push(['TOTAL', modelSummary.reduce((s, m) => s + m.count, 0), '']);
 
-    const ws3 = XLSX.utils.aoa_to_sheet(modelData);
-    ws3['!cols'] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws3, 'Model Summary');
+    const ws2 = XLSX.utils.aoa_to_sheet(modelData);
+    ws2['!cols'] = [{ wch: 20 }, { wch: 8 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Model Summary');
 
     const timestamp = new Date().toISOString().slice(0, 16).replace('T', '_').replace(':', '-');
     XLSX.writeFile(wb, `hanger_schedule_${timestamp}.xlsx`);
