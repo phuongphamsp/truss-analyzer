@@ -1022,7 +1022,7 @@ function parseReactionAtBearing(
 
     // Header block: "<N> -1 -1 -1 -1 <bearing0> <bearing1> [<bearing2> ...] <dolFactor>"
     // N = number of bearings (2 for standard truss, 3+ for multi-bearing/girder truss)
-    if (!line.match(/^\d+ -1 -1 -1 -1/)) { i++; continue; }
+    if (!line.match(/^\d+ -1 -1 [0-9-]+ -1/)) { i++; continue; }
 
     const hp = line.split(/\s+/);
     if (hp.length < 7) { i++; continue; }
@@ -1056,7 +1056,7 @@ function parseReactionAtBearing(
       // Kết thúc section
       if (dl === 'REACTION INFO' || (dl.startsWith('[') && dl !== '')) break;
 
-      if (!dl.startsWith('0')) { i++; continue; }
+      if (!dl.startsWith('0') && !dl.startsWith('1')) { i++; continue; }
 
       // Data line: "0  <value>  <indicator>  <bearingLoc>  <width>  2  <loadType>  ..."
       // col[0]=0, col[1]=value, col[2]=indicator, col[3]=bearingLoc, col[6]=loadType(-1=total)
