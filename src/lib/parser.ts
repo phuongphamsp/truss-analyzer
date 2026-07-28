@@ -1085,12 +1085,15 @@ function parseReactionAtBearing(
   // upliftReaction = min value → pick its dolFactor
   const upliftEntry = entries.reduce((a, b) => b.value < a.value ? b : a);
 
+  // Only treat as uplift if the minimum value is actually negative
+  const hasUplift = upliftEntry.value < 0;
+
   return {
     downReaction:    downEntry.value,
-    upliftReaction:  upliftEntry.value,
+    upliftReaction:  hasUplift ? upliftEntry.value : 0,
     bearingSide:     resolvedBearingSide ?? 'left',
     downDolFactor:   downEntry.dolFactor,
-    upliftDolFactor: upliftEntry.dolFactor,
+    upliftDolFactor: hasUplift ? upliftEntry.dolFactor : undefined,
   };
 }
 
