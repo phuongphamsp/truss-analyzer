@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { analyzeFiles, type LogCallback } from '../lib/parser';
 import { GirderGroup, LogEntry } from '../types';
+import { getSSTToken, setSSTToken, clearSSTToken, hasSSTToken } from '../lib/sst-api';
 
 interface FileUploadProps {
   onAnalyze: (girders: GirderGroup[]) => void;
@@ -126,6 +127,94 @@ export function FileUpload({ onAnalyze, onLog }: FileUploadProps) {
         >
             {isAnalyzing ? 'Processing...' : 'Run Analysis Engine'}
         </button>
+
+        {/* SST Token */}
+        <SSTTokenSection />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SST Bearer Token — compact inline section
+// ---------------------------------------------------------------------------
+
+function SSTTokenSection() {
+  const [tokenValue, setTokenValue] = useState(getSSTToken() ?? '');
+  const [saved, setSaved] = useState(hasSSTToken());
+  const [editing, setEditing] = useState(false);
+
+  const handleSave = () => {
+    if (tokenValue.trim()) {
+      setSSTToken(tokenValue.trim());
+      setSaved(true);
+      setEditing(false);
+    }
+  };
+
+  const handleClear = () => {
+    clearSSTToken();
+    setTokenValue('');
+    setSaved(false);
+    setEditing(false);
+  };
+
+  if (saved && !editing) {
+    return (
+      <div className="flex items-center justify-between bg-[#EDEDED] border border-[#141414]/30 rounded px-2 py-1.5">
+        <div className="flex items-center space-x-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[#141414]">SST Token</span>
+        </div>
+        <div className="flex items-center space-x-1.5">
+          <span className="text-[9px] font-mono text-green-700">Connected</span>
+          <button
+            onClick={() => setEditing(true)}
+            className="text-[8px] font-bold uppercase text-zinc-500 hover:text-[#141414] transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={handleClear}
+            className="text-[8px] font-bold uppercase text-red-500 hover:text-red-700 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[#EDEDED] border border-[#141414]/30 rounded p-2 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-[#141414]">SST Bearer Token</span>
+        </div>
+        {editing && (
+          <button
+            onClick={() => { setEditing(false); setTokenValue(getSSTToken() ?? ''); }}
+            className="text-[8px] font-bold uppercase text-zinc-500 hover:text-[#141414]"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
+      <input
+        type="password"
+        value={tokenValue}
+        onChange={(e) => setTokenValue(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        placeholder="Paste token from app.strongtie.com/hs DevTools..."
+        className="w-full bg-white border border-[#141414]/20 rounded px-2 py-1 text-[9px] font-mono text-[#141414] placeholder:text-zinc-400 focus:outline-none focus:border-[#141414]/60"
+      />
+      <button
+        onClick={handleSave}
+        disabled={!tokenValue.trim()}
+        className="w-full px-2 py-1 bg-[#141414] text-white text-[9px] font-bold uppercase tracking-wider hover:bg-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed rounded"
+      >
+        Save Token
+      </button>
     </div>
   );
 }

@@ -520,6 +520,115 @@ function parseMembers(lines: string[], startIndex: number, count: number): TreMe
   return members;
 }
 
+/**
+ * Parse [ADDITIONAL CUTTING INFO] section — authoritative source for member grade/size.
+ * Format per line: qty,qty,qty,qty,NAME,size,grade,species,...
+ * Special case for W2 (doubled): qty,qty,qty,qty,W2, W2,size,grade,species,...
+ */
+function parseCuttingInfo(text: string): Array<{
+  name: string;
+  type: 'TopChord' | 'BottomChord' | 'Web' | 'Other';
+  size: string;
+  grade: string;
+  species: string;
+}> {
+  const results: Array<{ name: string; type: 'TopChord' | 'BottomChord' | 'Web' | 'Other'; size: string; grade: string; species: string }> = [];
+  const lines = text.split('\n');
+  let inSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === '[ADDITIONAL CUTTING INFO]') {
+      inSection = true;
+      continue;
+    }
+    if (inSection && trimmed.startsWith('[')) break; // next section
+    if (!inSection) continue;
+    if (!trimmed || trimmed.startsWith('Number')) continue;
+
+    // Split by comma
+    const parts = trimmed.split(',').map(p => p.trim());
+    if (parts.length < 8) continue;
+
+    // Detect doubled member (e.g. "W2, W2" occupies parts[4] and parts[5])
+    // Normal:  [0]=qty [1]=qty [2]=qty [3]=qty [4]=NAME [5]=size [6]=grade [7]=species
+    // Doubled: [0]=qty [1]=qty [2]=qty [3]=qty [4]=NAME [5]=NAME [6]=size  [7]=grade [8]=species
+    let name: string;
+    let size: string;
+    let grade: string;
+    let species: string;
+
+    const p4 = parts[4];
+    const p5 = parts[5];
+    // If p4 and p5 look like the same member name (non-numeric, non-dimension)
+    if (p4 && p5 && !/^\d/.test(p5) && !p5.includes('x') && p4.toUpperCase() === p5.toUpperCase()) {
+      // doubled member
+      name = p4;
+      size = parts[6] || '';
+      grade = parts[7] || '';
+      species = parts[8] || '';
+    } else {
+      name = p4;
+      size = p5 || '';
+      grade = parts[6] || '';
+      species = parts[7] || '';
+    }
+
+    if (!name || !size) continue;
+
+    const upper = name.toUpperCase();
+    let type: 'TopChord' | 'BottomChord' | 'Web' | 'Other' = 'Other';
+    if (upper.startsWith('T') && !upper.startsWith('TH')) type = 'TopChord';
+    else if (upper.startsWith('B') && !upper.startsWith('BR')) type = 'BottomChord';
+    else if (upper.startsWith('W')) type = 'Web';
+
+    results.push({ name, type, size, grade, species });
+  }
+
+  return results;
+}
+
+/**
+ * Given a list of cutting members of the same type, compute:
+ * - majority spec (size + grade + species)
+ * - exceptions (members that differ from majority)
+ * Returns { majority, exceptions: [{name, spec}] }
+ */
+function computeMajoritySpec(members: Array<{ name: string; size: string; grade: string; species: string }>): {
+  majority: string;
+  exceptions: Array<{ name: string; spec: string }>;
+} {
+  if (members.length === 0) return { majority: '', exceptions: [] };
+
+  // Count occurrences of each spec
+  const specCount = new Map<string, number>();
+  for (const m of members) {
+    const spec = `${m.size} ${m.grade} ${m.species}`;
+    specCount.set(spec, (specCount.get(spec) || 0) + 1);
+  }
+
+  // Find majority spec (most common)
+  let majority = '';
+  let maxCount = 0;
+  for (const [spec, count] of specCount) {
+    if (count > maxCount) {
+      maxCount = count;
+      majority = spec;
+    }
+  }
+
+  // Find exceptions
+  const exceptions: Array<{ name: string; spec: string }> = [];
+  for (const m of members) {
+    const spec = `${m.size} ${m.grade} ${m.species}`;
+    if (spec !== majority) {
+      exceptions.push({ name: m.name, spec });
+    }
+  }
+
+  return { majority, exceptions };
+}
+
 function parseDOL(text: string): number | null {
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
@@ -544,7 +653,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-  const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number }> = [];
+   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -558,13 +667,22 @@ function parseHangers(text: string) {
       const parts = trimmed.split('=')[1]?.trim().split(/\s+/);
       if (parts && parts.length > 6) {
         const xInches = parseFloat(parts[2]);
+        // LG*T field layout (0-based after '='):
+        // [0]=flag [1]=flag [2]=xInches [3]=flag [4]=label [5]=width [6]=heelHeight
+        // [7][8][9][10][11]=flags [12]=skewAngle1 [13]=bearingSideFlag(0=left,1=right) [14]=angle [15]=bearingSideFlag2 [16]=bearingLocation ...
+        const bearingLocation  = parts.length > 16 ? parseFloat(parts[16]) : 0;
+        const angle            = parts.length > 14 ? parseFloat(parts[14]) : 90;
+        const bearingSideFlag  = parts.length > 13 ? parseInt(parts[13]) : 0; // 0=left, 1=right
         if (!isNaN(xInches)) {
           hangers.push({
-            xFeet: xInches / 12, // It's already in inches
+            xFeet: xInches / 12,
             xInches: xInches,
             label: parts[4],
             width: parseFloat(parts[5]) || 0,
-            heelHeight: parseFloat(parts[6]) || 0
+            heelHeight: parseFloat(parts[6]) || 0,
+            bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation,
+            angle: isNaN(angle) ? 90 : angle,
+            bearingSideFlag,
           });
         }
       }
@@ -719,14 +837,42 @@ function parseTre(text: string, filename: string): TreData | null {
   const spM = text.match(/^Spacing\s*=\s*([\d.]+)/mi);
   if (spM) spacing = parseFloat(spM[1]);
 
-  // Derive top chord, bottom chord, webs materials
-  const topChords = members.filter(m => m.type === 'TopChord');
-  const bottomChords = members.filter(m => m.type === 'BottomChord');
-  const webs = members.filter(m => m.type === 'Web');
+  // Parse [ADDITIONAL CUTTING INFO] — authoritative source for grade/size
+  const cuttingMembers = parseCuttingInfo(text);
 
-  const topChord = topChords.length > 0 ? `${topChords[0].size} ${topChords[0].grade} ${topChords[0].species}` : "2x4 No.2 SP";
-  const bottomChord = bottomChords.length > 0 ? `${bottomChords[0].size} ${bottomChords[0].grade} ${bottomChords[0].species}` : "2x4 No.2 SP";
-  const websMat = webs.length > 0 ? `${webs[0].size} ${webs[0].grade} ${webs[0].species}` : "2x4 No.3 SP";
+  // Derive top chord, bottom chord, webs materials
+  // Prefer [ADDITIONAL CUTTING INFO]; fall back to MEMBER INFO
+  let topChord: string;
+  let bottomChord: string;
+  let websMat: string;
+
+  const cutTopChords = cuttingMembers.filter(m => m.type === 'TopChord');
+  const cutBottomChords = cuttingMembers.filter(m => m.type === 'BottomChord');
+  const cutWebs = cuttingMembers.filter(m => m.type === 'Web');
+
+  if (cutTopChords.length > 0) {
+    const { majority } = computeMajoritySpec(cutTopChords);
+    topChord = majority;
+  } else {
+    const topChords = members.filter(m => m.type === 'TopChord');
+    topChord = topChords.length > 0 ? `${topChords[0].size} ${topChords[0].grade} ${topChords[0].species}` : "2x4 No.2 SP";
+  }
+
+  if (cutBottomChords.length > 0) {
+    const { majority } = computeMajoritySpec(cutBottomChords);
+    bottomChord = majority;
+  } else {
+    const bottomChords = members.filter(m => m.type === 'BottomChord');
+    bottomChord = bottomChords.length > 0 ? `${bottomChords[0].size} ${bottomChords[0].grade} ${bottomChords[0].species}` : "2x4 No.2 SP";
+  }
+
+  if (cutWebs.length > 0) {
+    const { majority } = computeMajoritySpec(cutWebs);
+    websMat = majority;
+  } else {
+    const webs = members.filter(m => m.type === 'Web');
+    websMat = webs.length > 0 ? `${webs[0].size} ${webs[0].grade} ${webs[0].species}` : "2x4 No.3 SP";
+  }
 
   const maxReaction = Math.max(reactions.leftDown, reactions.rightDown);
   const dol = parseDOL(text);
@@ -739,10 +885,17 @@ function parseTre(text: string, filename: string): TreData | null {
   let leftHeel = defaults.leftHeel;
   let rightHeel = defaults.rightHeel;
 
-  const hmL = text.match(/HeelHeightLeft\s*=\s*([\d.]+)/i);
-  const hmR = text.match(/HeelHeightRight\s*=\s*([\d.]+)/i);
+  // TRE format: "Left Heel Height=4.1600" or legacy "HeelHeightLeft=..."
+  const hmL = text.match(/Left\s+Heel\s+Height\s*=\s*([\d.]+)/i) ?? text.match(/HeelHeightLeft\s*=\s*([\d.]+)/i);
+  const hmR = text.match(/Right\s+Heel\s+Height\s*=\s*([\d.]+)/i) ?? text.match(/HeelHeightRight\s*=\s*([\d.]+)/i);
   if (hmL) leftHeel = parseFloat(hmL[1]);
   if (hmR) rightHeel = parseFloat(hmR[1]);
+
+  // TRE format: "Left Stub=48.0000" / "Right Stub=0.5000"
+  const lsM = text.match(/^Left\s+Stub\s*=\s*([\d.]+)/mi);
+  const rsM = text.match(/^Right\s+Stub\s*=\s*([\d.]+)/mi);
+  const leftStub  = lsM ? parseFloat(lsM[1]) : 0;
+  const rightStub = rsM ? parseFloat(rsM[1]) : 0;
   
   if (!hmL || !hmR) {
     for (let i = 0; i < lines.length; i++) {
@@ -768,6 +921,20 @@ function parseTre(text: string, filename: string): TreData | null {
   const csiM = text.match(/CSI\s*=\s*([\d.]+)/i) || text.match(/Max\s+CSI\s*=\s*([\d.]+)/i) || text.match(/Stress\s+Ratio\s*=\s*([\d.]+)/i);
   if (csiM) csi = parseFloat(csiM[1]);
 
+  // Ply= from [ADDITIONAL TRUSS INFO]
+  let ply: number | undefined = undefined;
+  const plyM = text.match(/^Ply\s*=\s*(\d+)/mi);
+  if (plyM) ply = parseInt(plyM[1], 10);
+
+  // Bottom Chord Slopes= (degrees per segment, left→right)
+  // e.g. "Bottom Chord Slopes=0.00 14.04 -14.04"
+  let bottomChordSlopes: number[] | undefined = undefined;
+  const bcsM = text.match(/^Bottom\s+Chord\s+Slopes\s*=\s*([^\r\n]+)/mi);
+  if (bcsM) {
+    const vals = bcsM[1].trim().split(/\s+/).map(parseFloat).filter(v => !isNaN(v));
+    if (vals.length > 0) bottomChordSlopes = vals;
+  }
+
   return {
     label,
     isGirder,
@@ -777,14 +944,156 @@ function parseTre(text: string, filename: string): TreData | null {
     maxReaction,
     reactions,
     members,
+    cuttingMembers,
     span,
     pitch,
     spacing,
     dol,
+    ply,
     hangers,
     leftHeel,
     rightHeel,
-    csi
+    leftStub,
+    rightStub,
+    bottomChordSlopes,
+    csi,
+    rawText: text
+  };
+}
+
+/**
+ * TRE-based Bearing Detection
+ *
+ * Xác định downReaction và upliftReaction tại một bearing location cụ thể
+ * bằng cách đọc trực tiếp từ REACTION INFO section trong carried truss TRE.
+ *
+ * Cách hoạt động:
+ * 1. Mỗi hanger LG*T trong girder TRE có ghi sẵn bearingLocation (field[16])
+ *    ví dụ: LG0T=0 1 30.0001 0 J06C 1.5 17.1006 9 2 1 0 0 0 0 90 0 71.1875 ...
+ *                                                                       ^^^^^
+ *                                                               bearingLocation = 71.1875"
+ *
+ * 2. Carried truss TRE có section REACTION INFO với N load cases.
+ *    Mỗi load case là 1 block gồm:
+ *    - Header line: "<N> -1 -1 -1 -1 <bearing0> [<bearing1> ...] <dolFactor>"
+ *      → N = số bearings (2 cho truss thường, 3+ cho multi-bearing truss)
+ *      → bearing coords là tất cả các giá trị từ field[5] đến field[length-2]
+ *    - Data lines: mỗi nhóm ứng với 1 bearing end
+ *      → dòng tổng (governing) có col[6] = -1
+ *      → col[1] = reaction value tại bearing đó
+ *
+ * 3. Match bearingLocation từ girder TRE với bearingA hoặc bearingB trong header
+ *    → chỉ đọc nhóm data lines tương ứng với bearing đó
+ *    → lấy dòng tổng (col[6] = -1) của nhóm đó
+ *
+ * 4. Loop tất cả load cases → collect values
+ *    → downReaction  = max(values)  (giá trị dương lớn nhất)
+ *    → upliftReaction = min(values) (giá trị âm nhỏ nhất)
+ *
+ * Ưu điểm so với IFC bbox method:
+ * - Không phụ thuộc IFC file
+ * - Không bị MOCK (luôn có kết quả nếu có TRE)
+ * - Chính xác hơn vì dùng đúng bearing location từ TRE
+ */
+const BEARING_LOCATION_TOLERANCE = 4.1; // inches — covers floating point drift and coordinate system offset (T09A case: diff=4.000046")
+
+function parseReactionAtBearing(
+  carriedTreTxt: string,
+  targetBearing: number
+): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number } | null {
+  const lines = carriedTreTxt.split('\n');
+
+  // Tìm REACTION INFO section
+  let i = 0;
+  while (i < lines.length && lines[i].trim() !== 'REACTION INFO') i++;
+  if (i >= lines.length) return null;
+
+  i++; // bỏ qua "REACTION INFO"
+  // Bỏ qua dòng số load cases
+  while (i < lines.length && lines[i].trim() === '') i++;
+  i++; // bỏ qua count line
+
+  // Track value + dolFactor per collected entry
+  const entries: Array<{ value: number; dolFactor: number }> = [];
+  let resolvedBearingSide: 'left' | 'right' | null = null;
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    // Header block: "<N> -1 -1 -1 -1 <bearing0> <bearing1> [<bearing2> ...] <dolFactor>"
+    // N = number of bearings (2 for standard truss, 3+ for multi-bearing/girder truss)
+    if (!line.match(/^\d+ -1 -1 [0-9-]+ -1/)) { i++; continue; }
+
+    const hp = line.split(/\s+/);
+    if (hp.length < 7) { i++; continue; }
+
+    // dolFactor is the last field of the header line (e.g. 1.150000, 1.600000)
+    const dolFactor = parseFloat(hp[hp.length - 1]);
+
+    // Bearing coords start at hp[5]; last field is dolFactor, so bearings are hp[5..length-2]
+    // Find which bearing coord matches targetBearing
+    const bearingCoords = hp.slice(5, hp.length - 1).map(parseFloat).filter(v => !isNaN(v));
+    const matchedBearing = bearingCoords.find(
+      b => Math.abs(b - targetBearing) <= BEARING_LOCATION_TOLERANCE
+    );
+    if (matchedBearing === undefined) { i++; continue; }
+
+    // Determine bearing side: smallest coord = left end, largest = right end
+    if (resolvedBearingSide === null) {
+      const minB = Math.min(...bearingCoords);
+      const maxB = Math.max(...bearingCoords);
+      resolvedBearingSide = Math.abs(matchedBearing - minB) <= Math.abs(matchedBearing - maxB)
+        ? 'left' : 'right';
+    }
+
+    // Đọc data lines của block này
+    i++;
+    while (i < lines.length) {
+      const dl = lines[i].trim();
+
+      // Kết thúc block khi gặp header mới
+      if (dl.match(/^\d+ -1 -1 -1 -1/)) break;
+      // Kết thúc section
+      if (dl === 'REACTION INFO' || (dl.startsWith('[') && dl !== '')) break;
+
+      if (!dl.startsWith('0') && !dl.startsWith('1')) { i++; continue; }
+
+      // Data line: "0  <value>  <indicator>  <bearingLoc>  <width>  2  <loadType>  ..."
+      // col[0]=0, col[1]=value, col[2]=indicator, col[3]=bearingLoc, col[6]=loadType(-1=total)
+      const dp = dl.split(/\s+/);
+      if (dp.length < 7) { i++; continue; }
+
+      const value      = parseFloat(dp[1]);
+      const bearingLoc = parseFloat(dp[3]);
+      const loadType   = parseFloat(dp[6]); // -1 = dòng tổng (governing)
+
+      const isTotal        = loadType === -1;
+      const isMatchBearing = Math.abs(bearingLoc - matchedBearing) <= BEARING_LOCATION_TOLERANCE;
+
+      if (isTotal && isMatchBearing) {
+        entries.push({ value, dolFactor });
+      }
+
+      i++;
+    }
+  }
+
+  if (entries.length === 0) return null;
+
+  // downReaction = max value → pick its dolFactor
+  const downEntry   = entries.reduce((a, b) => b.value > a.value ? b : a);
+  // upliftReaction = min value → pick its dolFactor
+  const upliftEntry = entries.reduce((a, b) => b.value < a.value ? b : a);
+
+  // Only treat as uplift if the minimum value is actually negative
+  const hasUplift = upliftEntry.value < 0;
+
+  return {
+    downReaction:    downEntry.value,
+    upliftReaction:  hasUplift ? upliftEntry.value : 0,
+    bearingSide:     resolvedBearingSide ?? 'left',
+    downDolFactor:   downEntry.dolFactor,
+    upliftDolFactor: hasUplift ? upliftEntry.dolFactor : undefined,
   };
 }
 
@@ -815,19 +1124,55 @@ function determinePhysicalCarriedEnd(c: TrussInstance, girder: TrussInstance): '
 }
 
 function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInstance) {
-  carriedTrusses.forEach(c => {
+  const girderHangers = girder.treData?.hangers || [];
+
+  carriedTrusses.forEach((c, idx) => {
+    const hanger = girderHangers[idx];
+    const carriedTreTxt = c.treData?.rawText;
+
+    // --- TRE-based Bearing Detection (primary method) ---
+    // Dùng bearingLocation từ LG*T line trong girder TRE để tìm đúng reaction
+    // trong REACTION INFO của carried truss TRE.
+    //
+    // bearingLocation (field[16] của LG*T) là vị trí bearing tính từ left end của carried truss.
+    // REACTION INFO dùng tọa độ tính từ heel (sau khi trừ stub offset).
+    // Ví dụ: bearingLocation=49.75", Left Stub=48" → tọa độ trong REACTION INFO = 49.75 - 48 = 1.75"
+    if (hanger && hanger.bearingLocation >= 0 && carriedTreTxt) {
+      const carriedTre = c.treData;
+      const leftStub  = carriedTre?.leftStub  ?? 0;
+      const rightStub = carriedTre?.rightStub ?? 0;
+      const span      = carriedTre?.span      ?? 0;
+
+      // Thử adjust theo left stub trước, nếu không match thì thử right stub
+      const adjustedLeft  = hanger.bearingLocation - leftStub;
+      const adjustedRight = span - hanger.bearingLocation - rightStub;
+      const targetBearing = adjustedLeft >= 0 ? adjustedLeft : adjustedRight;
+
+      const result = parseReactionAtBearing(carriedTreTxt, targetBearing);
+      if (result) {
+        c.downReaction    = result.downReaction;
+        c.upliftReaction  = result.upliftReaction;
+        c.bearingSide     = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
+        c.downDolFactor   = result.downDolFactor;
+        c.upliftDolFactor = result.upliftDolFactor;
+        return;
+      }
+    }
+
+    // --- Fallback: IFC bbox method ---
+    // Dùng khi không có bearingLocation hoặc không parse được REACTION INFO
     const bearingSide = determinePhysicalCarriedEnd(c.instance, girder);
     c.bearingSide = bearingSide;
-    
+
     const cTre = c.treData;
     const rx = cTre?.reactions || getDefaultReactions(c.instance.label);
-    
+
     if (bearingSide === 'left') {
-      c.downReaction = rx.leftDown;       // Reaction1
-      c.upliftReaction = rx.leftUp;       // Max Uplift1
+      c.downReaction   = rx.leftDown;  // Reaction1
+      c.upliftReaction = rx.leftUp;    // Max Uplift1
     } else {
-      c.downReaction = rx.rightDown;     // Reaction2
-      c.upliftReaction = rx.rightUp;     // Max Uplift2
+      c.downReaction   = rx.rightDown; // Reaction2
+      c.upliftReaction = rx.rightUp;   // Max Uplift2
     }
   });
 }
@@ -928,7 +1273,8 @@ function computeCarriedTrussGeometry(girder: TrussInstance, carriedInstances: Tr
         member,
         memberSize,
         treData,
-        spacing: null
+        spacing: null,
+        hangerAngle: h.angle,  // LG*T field[14]: angle of carried truss relative to girder
       });
     }
   } else {
@@ -1065,13 +1411,6 @@ function analyzeConnections(instances: TrussInstance[], treMap: Map<string, TreD
             }
           }
           if (!isRepeated) continue;
-
-          // FILTER 2: Carried truss should be SHORTER than girder
-          const gLen = Math.max(girder.boundingBox!.maxX - girder.boundingBox!.minX, girder.boundingBox!.maxY - girder.boundingBox!.minY);
-          const cLen = Math.max(carriedInstance.boundingBox!.maxX - carriedInstance.boundingBox!.minX, carriedInstance.boundingBox!.maxY - carriedInstance.boundingBox!.minY);
-          // Relax multiplier to 2.5 for single-instance or special girders (like T07 or G01)
-          const multiplier = (freq[girder.label.toUpperCase()] || 1) === 1 || girder.label.toUpperCase() === 'T07' || girder.label.toUpperCase() === 'G01' ? 2.5 : 1.5;
-          if (cLen > gLen * multiplier) continue;
 
           // Add to potential connections
           connections.push({ girder, carried: carriedInstance });

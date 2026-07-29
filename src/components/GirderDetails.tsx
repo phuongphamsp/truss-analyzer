@@ -9,17 +9,26 @@ import {
   TrendingUp, 
   Activity, 
   Hash, 
-  AlertCircle 
+  AlertCircle,
+  ArrowLeft,
+  Search
 } from 'lucide-react';
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
+import { SSTWorkspace } from './SSTWorkspace';
+import type { ParsedInventory } from '../lib/inventory';
+import type { SSTHangerResult } from '../lib/sst-types';
 
 interface GirderDetailsProps {
     group: GirderGroup | null;
+    inventory: ParsedInventory | null;
+    onInventoryChange: (inv: ParsedInventory | null) => void;
+    onHangersLoaded?: (girderId: string, carriedId: string, hangers: SSTHangerResult[]) => void;
 }
 
-export function GirderDetails({ group }: GirderDetailsProps) {
+export function GirderDetails({ group, inventory, onInventoryChange, onHangersLoaded }: GirderDetailsProps) {
     const [selectedCarriedId, setSelectedCarriedId] = useState<string | null>(null);
+    const [sstMode, setSstMode] = useState(false);
 
     if (!group) {
         return (
@@ -49,6 +58,17 @@ export function GirderDetails({ group }: GirderDetailsProps) {
     const bottomChordMaterial = group.girder.ifcBottomChord || group.girder.treData?.bottomChord || selectedCarried?.treData?.bottomChord || "B1/B2 2x6 2400F SP";
     const websMaterial = group.girder.ifcWebs || group.girder.treData?.webs || selectedCarried?.treData?.webs || "2x4 No.3 SP";
 
+    // Compute *Except* exceptions from [ADDITIONAL CUTTING INFO]
+    const cuttingMembers = group.girder.treData?.cuttingMembers ?? [];
+    function getExceptions(type: 'TopChord' | 'BottomChord' | 'Web', majoritySpec: string) {
+        return cuttingMembers
+            .filter(m => m.type === type)
+            .filter(m => `${m.size} ${m.grade} ${m.species}` !== majoritySpec);
+    }
+    const tcExceptions = getExceptions('TopChord', topChordMaterial);
+    const bcExceptions = getExceptions('BottomChord', bottomChordMaterial);
+    const webExceptions = getExceptions('Web', websMaterial);
+
     // Reactions & Engineering metrics
     const downwardReaction = selectedCarried?.downReaction ?? selectedCarried?.treData?.maxReaction ?? 0;
     const upliftReaction = selectedCarried?.upliftReaction ?? 0;
@@ -58,7 +78,7 @@ export function GirderDetails({ group }: GirderDetailsProps) {
     return (
         <div className="flex-1 flex overflow-hidden bg-[#1E1F29]">
             {/* Middle Column: Carried Trusses List */}
-            <section className="w-80 border-r border-[#141414] flex flex-col bg-[#EDEDED] shrink-0">
+            <section className="w-[480px] border-r border-[#141414] flex flex-col bg-[#EDEDED] shrink-0">
                 <div className="p-3 border-b border-[#141414] flex justify-between items-center bg-[#D4D3D0] shrink-0">
                     <h2 className="text-[10px] uppercase font-bold tracking-widest text-[#141414]">Carried by {group.girder.label}</h2>
                     <span className="text-[10px] font-mono text-[#141414] font-bold">[{String(carried.length).padStart(2, '0')} Items]</span>
@@ -71,7 +91,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                 <th className="p-2 text-right">Offset X</th>
                                 <th className="p-2 text-right">Rxn ↓</th>
                                 <th className="p-2 text-right">Uplift ↑</th>
-                                <th className="p-3 text-right">DOL</th>
+                                <th className="p-2 text-right">DOL</th>
+                                <th className="p-2 text-center">SST</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -108,15 +129,33 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <td className="p-2 text-right" style={{ color: isSelected ? '#4FC3F7' : '#0369A1' }}>
                                             {rxnUp.toFixed(0)} lb
                                         </td>
-                                        <td className="p-3 text-right" style={{ color: isSelected ? '#81C784' : '#15803D' }}>
+                                        <td className="p-2 text-right" style={{ color: isSelected ? '#81C784' : '#15803D' }}>
                                             {dolVal !== null ? dolVal.toFixed(2) : '—'}
+                                        </td>
+                                        <td className="p-1 text-center">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedCarriedId(c.instance.id);
+                                                    setSstMode(true);
+                                                }}
+                                                className={cn(
+                                                    "px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider transition-colors",
+                                                    isSelected
+                                                        ? "bg-cyan-600 text-white hover:bg-cyan-500"
+                                                        : "bg-cyan-600/15 text-cyan-700 hover:bg-cyan-600/30"
+                                                )}
+                                                title={`Find hangers for ${c.instance.label}`}
+                                            >
+                                                <Search className="w-3 h-3 inline" />
+                                            </button>
                                         </td>
                                     </tr>
                                 )
                             })}
                             {carried.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="p-4 text-center opacity-50 text-[10px]">No carried trusses.</td>
+                                    <td colSpan={6} className="p-4 text-center opacity-50 text-[10px]">No carried trusses.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -129,19 +168,50 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                 {/* Header Strip */}
                 <div className="h-10 bg-[#12131C] border-b border-[#1E293B] flex items-center justify-between px-4 shrink-0">
                     <div className="flex items-center space-x-2">
-                        <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                        <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
-                            Truss Structural Analyzer Workspace
-                        </span>
+                        {sstMode ? (
+                            <>
+                                <button
+                                    onClick={() => setSstMode(false)}
+                                    className="flex items-center space-x-1.5 text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-400 hover:text-zinc-200 transition-colors"
+                                >
+                                    <ArrowLeft className="w-3.5 h-3.5" />
+                                    <span>Back to Workspace</span>
+                                </button>
+                                <span className="text-zinc-600 mx-2">|</span>
+                                <Search className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
+                                    SST Hanger Selector — {selectedCarried?.instance.label}
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                                <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
+                                    Truss Structural Analyzer Workspace
+                                </span>
+                            </>
+                        )}
                     </div>
                     <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span className="text-[9px] font-mono text-emerald-400 uppercase font-bold">AISC solver 2.4</span>
-                        </div>
+                        {!sstMode && (
+                            <div className="flex items-center space-x-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="text-[9px] font-mono text-emerald-400 uppercase font-bold">AISC solver 2.4</span>
+                            </div>
+                        )}
                     </div>
                 </div>
 
+                {sstMode && selectedCarried ? (
+                    <SSTWorkspace
+                      group={group}
+                      selectedCarried={selectedCarried}
+                      inventory={inventory}
+                      onInventoryChange={onInventoryChange}
+                      onHangersLoaded={onHangersLoaded}
+                    />
+                ) : (
+                <>
                 {/* Split workspace area */}
                 <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
                     {/* Left Panel: The 2 Diagrams Stacked */}
@@ -232,6 +302,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <span>TC 2x4</span>
                                         <span>{topChordMaterial}</span>
                                     </div>
+                                    {tcExceptions.length > 0 && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {tcExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#FF6B6B]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-[8px] uppercase text-zinc-400 mb-0.5">Bottom Chord Spec</div>
@@ -241,10 +321,13 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                                 const xs = m.coords.map(c => c.x);
                                                 const minX = xs.length > 0 ? Math.round(Math.min(...xs)) : 0;
                                                 const maxX = xs.length > 0 ? Math.round(Math.max(...xs)) : span;
+                                                // Find authoritative grade from cuttingMembers
+                                                const cut = cuttingMembers.find(c => c.name.toUpperCase() === m.name.toUpperCase() && c.type === 'BottomChord');
+                                                const specStr = cut ? `${cut.size} ${cut.grade} ${cut.species}` : `${m.size} ${m.grade} ${m.species}`;
                                                 return (
                                                     <div key={idx} className="flex justify-between border-b border-[#2D313F]/60 pb-1">
                                                         <span className="font-semibold">{m.name} ({minX}" - {maxX}")</span>
-                                                        <span className="font-bold">{m.size} {m.grade} {m.species}</span>
+                                                        <span className="font-bold">{specStr}</span>
                                                     </div>
                                                 );
                                             })
@@ -261,6 +344,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                             </>
                                         )}
                                     </div>
+                                    {bcExceptions.length > 0 && !(group.girder.treData?.members && group.girder.treData.members.filter(m => m.type === 'BottomChord').length > 0) && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {bcExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#4FC3F7]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <div className="text-[8px] uppercase text-zinc-400 mb-0.5">Truss Webs Spec</div>
@@ -268,6 +361,16 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                                         <span>WEB 2x4</span>
                                         <span>{websMaterial}</span>
                                     </div>
+                                    {webExceptions.length > 0 && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {webExceptions.map((ex, i) => (
+                                                <div key={i} className="flex justify-between text-[10px] text-zinc-400 pl-2">
+                                                    <span className="italic">*Except* {ex.name}:</span>
+                                                    <span className="font-semibold text-[#81C784]/70">{ex.size} {ex.grade} {ex.species}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -390,6 +493,8 @@ export function GirderDetails({ group }: GirderDetailsProps) {
                         </div>
                     </div>
                 </div>
+                </>
+                )}
             </section>
         </div>
     );

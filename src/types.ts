@@ -1,6 +1,7 @@
 export interface TreData {
   label: string;
   isGirder?: boolean;
+  rawText?: string;  // raw TRE file content, used for TRE-based bearing detection
   topChord: string;
   bottomChord: string;
   webs: string;
@@ -23,19 +24,33 @@ export interface TreData {
     coords: Array<{ x: number, y: number }>;
     isStructural: boolean;
   }>;
+  /** Members parsed from [ADDITIONAL CUTTING INFO] — authoritative source for grade/size */
+  cuttingMembers?: Array<{
+    name: string;
+    type: 'TopChord' | 'BottomChord' | 'Web' | 'Other';
+    size: string;
+    grade: string;
+    species: string;
+  }>;
   span?: number;
   pitch?: number;
   spacing?: number;
   dol?: number | null;
+  ply?: number;         // Ply= field from [ADDITIONAL TRUSS INFO]
   csi?: number;
   leftHeel?: number;
   rightHeel?: number;
+  leftStub?: number;   // Left Stub= field from TRE (inches from left end to left bearing)
+  rightStub?: number;  // Right Stub= field from TRE (inches from right end to right bearing)
+  bottomChordSlopes?: number[];  // Bottom Chord Slopes= field (degrees per segment, left→right)
   hangers?: Array<{
     xFeet: number;
     xInches: number;
     label: string;
     width: number;
     heelHeight: number;
+    bearingLocation: number;  // bearing location of carried truss at this hanger (inches), from LG*T field[16]
+    angle: number;            // carried truss angle relative to girder (degrees), from LG*T field[14]; 90/270 = perpendicular
   }>;
 }
 
@@ -81,6 +96,9 @@ export interface CarriedTruss {
   bearingSide?: 'left' | 'right';
   downReaction?: number;
   upliftReaction?: number;
+  downDolFactor?: number;   // DOL factor of the LC that produced downReaction (e.g. 1.15, 1.25)
+  upliftDolFactor?: number; // DOL factor of the LC that produced upliftReaction (e.g. 1.6)
+  hangerAngle?: number;     // LG*T field[14]: angle of carried truss relative to girder (degrees)
 }
 
 export interface GirderGroup {
