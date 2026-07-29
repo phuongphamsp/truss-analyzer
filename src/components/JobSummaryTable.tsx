@@ -329,8 +329,8 @@ export function JobSummaryTable({
         row.hanger?.bearing ?? '',
         row.hanger?.cost ?? '',
         row.hanger ? (row.isInStock ? 'Yes' : 'No') : '',
-        row.selectionMode === 'available' ? 'Cheapest In-Stock'
-          : row.selectionMode === 'cheapest' ? 'Cheapest Overall'
+        row.selectionMode === 'available' ? 'Lowest Cost In-Stock'
+          : row.selectionMode === 'cheapest' ? 'Lowest Cost Overall'
           : 'Pending',
       ]);
     }
@@ -509,19 +509,90 @@ export function JobSummaryTable({
         {hasInventory && (
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono text-zinc-500 uppercase">Selection Mode</span>
-            <span className="text-[9px] font-mono text-emerald-400">Cheapest In-Stock (fallback: cheapest overall)</span>
+            <span className="text-[9px] font-mono text-emerald-400">Lowest Cost In-Stock (fallback: lowest cost overall)</span>
           </div>
         )}
         {!hasInventory && (
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono text-zinc-500 uppercase">Selection Mode</span>
-            <span className="text-[9px] font-mono text-zinc-400">Cheapest Overall (no inventory loaded)</span>
+            <span className="text-[9px] font-mono text-zinc-400">Lowest Cost Overall (no inventory loaded)</span>
           </div>
         )}
       </div>
 
       {/* Table area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+
+        {/* ── Model Summary Table ── */}
+        {modelSummary.length > 0 && (
+          <div className="border border-sky-800/50 rounded overflow-hidden shadow-lg shadow-sky-900/10">
+            {/* Header bar */}
+            <div className="bg-gradient-to-r from-sky-950 to-[#1A1B26] border-b border-sky-800/50 px-4 py-2.5 flex items-center gap-3">
+              <div className="w-1.5 h-4 rounded-sm bg-sky-500 shrink-0" />
+              <span className="text-[11px] font-bold text-sky-100 uppercase tracking-wider">
+                Hanger Model Summary
+              </span>
+              <span className="text-[9px] font-mono text-sky-400/70">
+                {modelSummary.length} model{modelSummary.length !== 1 ? 's' : ''} · {resolvedConnections} total hangers
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px] font-mono">
+                <thead>
+                  <tr className="text-[9px] uppercase tracking-wider text-sky-300 border-b border-sky-800/50 bg-sky-950/60">
+                    <th className="py-2.5 px-4">Hanger Model</th>
+                    <th className="py-2.5 px-4 text-right">Qty</th>
+                    {hasInventory && (
+                      <th className="py-2.5 px-4 text-right">In Stock</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {modelSummary.map(({ model, count, inStockCount }, idx) => (
+                    <tr
+                      key={model}
+                      className={cn(
+                        'border-b border-sky-900/30 transition-colors hover:bg-sky-900/20',
+                        idx % 2 === 0 ? 'bg-[#0C0D14]' : 'bg-sky-950/20'
+                      )}
+                    >
+                      <td className="py-2 px-4">
+                        <span className="font-bold text-sky-100 bg-sky-900/40 px-2 py-0.5 rounded text-[10px] border border-sky-800/40">
+                          {model}
+                        </span>
+                      </td>
+                      <td className="py-2 px-4 text-right">
+                        <span className="font-bold text-white text-[13px]">{count}</span>
+                      </td>
+                      {hasInventory && (
+                        <td className="py-2 px-4 text-right">
+                          {inStockCount > 0
+                            ? <span className="text-emerald-400 font-bold text-[12px]">{inStockCount}</span>
+                            : <span className="text-zinc-600">—</span>
+                          }
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-sky-700/50 bg-sky-950/60">
+                    <td className="py-2.5 px-4 text-[9px] uppercase tracking-wider text-sky-400 font-bold">Total</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-white text-[14px]">
+                      {modelSummary.reduce((s, m) => s + m.count, 0)}
+                    </td>
+                    {hasInventory && (
+                      <td className="py-2.5 px-4 text-right font-bold text-emerald-400 text-[13px]">
+                        {modelSummary.reduce((s, m) => s + m.inStockCount, 0) || '—'}
+                      </td>
+                    )}
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
         {girders.length === 0 && (
           <div className="text-center py-16 text-zinc-500 text-[11px] font-mono">
             No girder data loaded.
@@ -637,7 +708,7 @@ export function JobSummaryTable({
                           )}
                           {row.selectionMode === 'cheapest' && (
                             <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-                              Cheapest
+                              Lowest Cost
                             </span>
                           )}
                           {row.selectionMode === 'none' && (
@@ -657,75 +728,6 @@ export function JobSummaryTable({
           );
         })}
 
-        {/* ── Model Summary Table ── */}
-        {modelSummary.length > 0 && (
-          <div className="border border-sky-800/50 rounded overflow-hidden shadow-lg shadow-sky-900/10">
-            {/* Header bar */}
-            <div className="bg-gradient-to-r from-sky-950 to-[#1A1B26] border-b border-sky-800/50 px-4 py-2.5 flex items-center gap-3">
-              <div className="w-1.5 h-4 rounded-sm bg-sky-500 shrink-0" />
-              <span className="text-[11px] font-bold text-sky-100 uppercase tracking-wider">
-                Hanger Model Summary
-              </span>
-              <span className="text-[9px] font-mono text-sky-400/70">
-                {modelSummary.length} model{modelSummary.length !== 1 ? 's' : ''} · {resolvedConnections} total hangers
-              </span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[11px] font-mono">
-                <thead>
-                  <tr className="text-[9px] uppercase tracking-wider text-sky-300 border-b border-sky-800/50 bg-sky-950/60">
-                    <th className="py-2.5 px-4">Hanger Model</th>
-                    <th className="py-2.5 px-4 text-right">Qty</th>
-                    {hasInventory && (
-                      <th className="py-2.5 px-4 text-right">In Stock</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {modelSummary.map(({ model, count, inStockCount }, idx) => (
-                    <tr
-                      key={model}
-                      className={cn(
-                        'border-b border-sky-900/30 transition-colors hover:bg-sky-900/20',
-                        idx % 2 === 0 ? 'bg-[#0C0D14]' : 'bg-sky-950/20'
-                      )}
-                    >
-                      <td className="py-2 px-4">
-                        <span className="font-bold text-sky-100 bg-sky-900/40 px-2 py-0.5 rounded text-[10px] border border-sky-800/40">
-                          {model}
-                        </span>
-                      </td>
-                      <td className="py-2 px-4 text-right">
-                        <span className="font-bold text-white text-[13px]">{count}</span>
-                      </td>
-                      {hasInventory && (
-                        <td className="py-2 px-4 text-right">
-                          {inStockCount > 0
-                            ? <span className="text-emerald-400 font-bold text-[12px]">{inStockCount}</span>
-                            : <span className="text-zinc-600">—</span>
-                          }
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-sky-700/50 bg-sky-950/60">
-                    <td className="py-2.5 px-4 text-[9px] uppercase tracking-wider text-sky-400 font-bold">Total</td>
-                    <td className="py-2.5 px-4 text-right font-bold text-white text-[14px]">
-                      {modelSummary.reduce((s, m) => s + m.count, 0)}
-                    </td>
-                    {hasInventory && (
-                      <td className="py-2.5 px-4 text-right font-bold text-emerald-400 text-[13px]">
-                        {modelSummary.reduce((s, m) => s + m.inStockCount, 0) || '—'}
-                      </td>
-                    )}
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
