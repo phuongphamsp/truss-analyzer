@@ -10,7 +10,8 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
-import { buildSSTPayload, computeAnsitpi } from '../lib/sst-mapper';
+import { buildSSTPayload, computeAnsitpi, getRegionIssues } from '../lib/sst-mapper';
+import { useRegion, useRegionConfig } from '../lib/region';
 import {
   hasSSTToken,
   submitToSST,
@@ -56,15 +57,6 @@ const FASTENER_LABELS: Record<number, string> = {
 };
 const ANSITPI_LABELS: Record<number, string> = {
   0: 'Off', 3: 'On (End Connection)', 6: 'On (Interior Connection)',
-};
-const CODE_LABELS: Record<number, string> = {
-  0: 'None', 10: 'IBC 2018', 20: 'IRC 2018', 30: 'IBC 2021', 40: 'IRC 2021',
-};
-const DL_DUR_LABELS: Record<number, string> = {
-  90: 'Dead (90)', 100: 'Floor (100)', 115: 'Snow (115)', 125: 'Roof (125)', 160: 'Quake/Wind (160)',
-};
-const UL_DUR_LABELS: Record<number, string> = {
-  100: 'Normal (100)', 160: 'Quake/Wind (160)',
 };
 const SKEW_LABELS: Record<number, string> = { 0: 'None', 1: 'Left', 2: 'Right' };
 const SLOPE_LABELS: Record<number, string> = { 0: 'None', 1: 'Up', 2: 'Down' };
@@ -226,6 +218,11 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   carried: CarriedTruss;
   group: GirderGroup;
 }) {
+  const regionConfig = useRegionConfig();
+  const loadSuffix = regionConfig.loadLabelSuffix;
+  const toOptions = (labels: Record<number, string>) =>
+    Object.entries(labels).map(([value, label]) => ({ value: Number(value), label }));
+
   const [sections, setSections] = useState({
     connection: true,
     job: true,
@@ -375,7 +372,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 { value: 3, label: 'Screws' },
               ]}
             />
-            <Row label="Building Code" value={CODE_LABELS[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote="IRC 2018" />
+            <Row label="Building Code" value={regionConfig.codeLabels[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote={regionConfig.buildingCodeNote} />
             <SelectRow
               label="Download Duration"
               value={overrides.downloadDurationType}
@@ -384,13 +381,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               sourceNote={carried.downDolFactor != null
                 ? `DOL ${carried.downDolFactor.toFixed(2)} from downReaction LC`
                 : 'load duration factor'}
-              options={[
-                { value: 90, label: 'Dead (90)' },
-                { value: 100, label: 'Floor (100)' },
-                { value: 115, label: 'Snow (115)' },
-                { value: 125, label: 'Roof (125)' },
-                { value: 160, label: 'Wind/Quake (160)' },
-              ]}
+              options={toOptions(regionConfig.downloadDurationLabels)}
             />
             <SelectRow
               label="Uplift Duration"
@@ -400,12 +391,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               sourceNote={carried.upliftDolFactor != null
                 ? `DOL ${carried.upliftDolFactor.toFixed(2)} from upliftReaction LC`
                 : 'uplift duration factor'}
-              options={[
-                { value: 100, label: 'Normal (100)' },
-                { value: 160, label: 'Wind/Quake (160)' },
-              ]}
+              options={toOptions(regionConfig.upliftDurationLabels)}
             />
-            {isTruss && (
+            {isTruss && regionConfig.usesAnsitpi && (
               <SelectRow
                 label="ANSI/TPI 1 Evaluation"
                 value={overrides.ansitpi}
@@ -492,8 +480,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 : 'not in TRE'}
             />
             <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
-            <Row label="Download (ASD)" value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
-            <Row label="Uplift (ASD)" value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
+            <Row label={`Download (${loadSuffix})`} value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
+            <Row label={`Uplift (${loadSuffix})`} value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
         )}
 
@@ -563,9 +551,13 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5">Job Settings</div>
               <div className="space-y-1">
                 <MappingRow2 label="Job ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField={`LG{n}T= parts[4] (carried label) + girder label`} note="e.g. T07 on T04" />
-                <MappingRow2 label="Building Code" badge="Default" badgeColor="gray" note="IRC 2018" />
-                <MappingRow2 label="Duration of Load" badge="Default" badgeColor="gray" note="Roof = 1.25 (download) · Wind/Quake = 1.60 (uplift)" />
-                <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Computed" badgeColor="amber" treSection="[Hanger Loading Info.] + MEMBER INFO" treField="LG*T field[2]=xInches vs 5×BC_depth from nearest bearing" note="End (3) if dist &lt; 5d · Interior (6) if dist ≥ 5d · fallback: Interior" />
+                <MappingRow2 label="Building Code" badge="Default" badgeColor="gray" note={regionConfig.buildingCodeNote} />
+                <MappingRow2 label="Duration of Load" badge="Default" badgeColor="gray" note={regionConfig.loadLabelSuffix === 'LSD'
+                  ? 'Standard Term 1.00 (download) · Short Term 1.15 / Standard Term 1.00 (uplift)'
+                  : 'Roof = 1.25 (download) · Wind/Quake = 1.60 (uplift)'} />
+                {regionConfig.usesAnsitpi && (
+                  <MappingRow2 label="ANSI/TPI 1 Evaluation" badge="Computed" badgeColor="amber" treSection="[Hanger Loading Info.] + MEMBER INFO" treField="LG*T field[2]=xInches vs 5×BC_depth from nearest bearing" note="End (3) if dist &lt; 5d · Interior (6) if dist ≥ 5d · fallback: Interior" />
+                )}
                 <MappingRow2 label="Hanger Type" badge="Default" badgeColor="gray" note="All Types (0) — no filter" />
               </div>
 
@@ -595,12 +587,12 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                   note="bearingSide=left → Left Heel Height · bearingSide=right → Right Heel Height"
                 />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
-                <MappingRow2 label="Download (ASD)" badge="Computed" badgeColor="amber"
+                <MappingRow2 label={`Download (${loadSuffix})`} badge="Computed" badgeColor="amber"
                   treSection="REACTION INFO"
                   treField="max(col[1]) where col[6]=-1 (governing) and col[3] matches bearing coordinate"
                   note="max downward reaction across all load cases at the bearing end"
                 />
-                <MappingRow2 label="Uplift (ASD)" badge="Computed" badgeColor="amber"
+                <MappingRow2 label={`Uplift (${loadSuffix})`} badge="Computed" badgeColor="amber"
                   treSection="REACTION INFO"
                   treField="min(col[1]) where col[6]=-1 (governing) and col[3] matches bearing coordinate"
                   note="min (most negative) uplift reaction across all load cases"
@@ -753,8 +745,11 @@ function OutputPanel({
   inventory,
   onInventoryChange,
   onHangersLoaded,
+  blockedReasons,
 }: {
   payload: SSTPayload;
+  /** Region-specific reasons the lookup must not run (e.g. species unavailable in CAN) */
+  blockedReasons: string[];
   carriedLabel: string;
   viewMode: ViewMode;
   onViewChange: (mode: ViewMode) => void;
@@ -786,6 +781,12 @@ function OutputPanel({
   };
 
   const runQuery = useCallback(async () => {
+    if (blockedReasons.length > 0) {
+      setResult(null);
+      setFilters(EMPTY_FILTERS);
+      setError(`Hanger lookup blocked: ${blockedReasons.join(' ')}`);
+      return;
+    }
     if (!hasSSTToken()) {
       setError('No SST token set. Please set the Bearer token in the left sidebar first.');
       return;
@@ -808,7 +809,7 @@ function OutputPanel({
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(effectivePayload), carriedLabel]);
+  }, [JSON.stringify(effectivePayload), carriedLabel, blockedReasons.join('|')]);
 
   // Auto-run on mount and when overrides change
   useEffect(() => {
@@ -1252,7 +1253,9 @@ interface SSTWorkspaceProps {
 }
 
 export function SSTWorkspace({ group, selectedCarried, inventory, onInventoryChange, onHangersLoaded }: SSTWorkspaceProps) {
-  const payload = buildSSTPayload(group, selectedCarried);
+  const region = useRegion();
+  const payload = buildSSTPayload(group, selectedCarried, region);
+  const blockedReasons = getRegionIssues(group, selectedCarried, region);
   const [viewMode, setViewMode] = useState<ViewMode>('output-only');
 
   // Job Settings overrides — lifted here so OutputPanel re-runs when changed
@@ -1264,7 +1267,7 @@ export function SSTWorkspace({ group, selectedCarried, inventory, onInventoryCha
     ansitpi: payload.ansitpi,
   });
 
-  // Reset overrides when selected truss changes
+  // Reset overrides when selected truss or region changes
   useEffect(() => {
     setOverrides({
       style: payload.style,
@@ -1274,7 +1277,7 @@ export function SSTWorkspace({ group, selectedCarried, inventory, onInventoryCha
       ansitpi: payload.ansitpi,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCarried.instance.id]);
+  }, [selectedCarried.instance.id, region]);
 
   const showInput = viewMode === 'split' || viewMode === 'input-only';
   const showOutput = viewMode === 'split' || viewMode === 'output-only';
@@ -1321,6 +1324,7 @@ export function SSTWorkspace({ group, selectedCarried, inventory, onInventoryCha
         )}>
           <OutputPanel
             payload={payload}
+            blockedReasons={blockedReasons}
             carriedLabel={selectedCarried.instance.label}
             viewMode={viewMode}
             onViewChange={setViewMode}

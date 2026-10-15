@@ -93,6 +93,79 @@ export const UL_DURATION_NORMAL = 100;
 export const UL_DURATION_WIND_QUAKE = 160;
 
 // ---------------------------------------------------------------------------
+// Canada-specific constants
+//
+// Observed from the official Hanger Selector (app.strongtie.com/hs/can,
+// Truss Flush Bottom): buildingCode 41, ansitpi 0, download 100, uplift 115.
+// ---------------------------------------------------------------------------
+
+export const BUILDING_CODE_CAN_DEFAULT = 41;
+
+export const DL_DURATION_STANDARD_TERM = 100; // CAN: "Standard Term 1.00"
+export const UL_DURATION_STANDARD_TERM = 100; // CAN: "Standard Term 1.00"
+export const UL_DURATION_SHORT_TERM = 115;    // CAN: "Short Term 1.15"
+
+// ---------------------------------------------------------------------------
+// Region configuration (US vs CAN)
+// ---------------------------------------------------------------------------
+
+export type SSTRegion = 'us' | 'can';
+export const DEFAULT_REGION: SSTRegion = 'us';
+
+export interface SSTRegionConfig {
+  label: string;
+  /** Default building code sent to the API */
+  buildingCode: number;
+  buildingCodeNote: string;
+  /** Whether the ANSI/TPI 1 evaluation applies (CAN: hidden, always 0) */
+  usesAnsitpi: boolean;
+  /** SST material codes (Truss species) accepted by the region's selector */
+  supportedTrussMaterials: number[];
+  /** "ASD" (US) or "LSD" (CAN) — labels only */
+  loadLabelSuffix: 'ASD' | 'LSD';
+  codeLabels: Record<number, string>;
+  downloadDurationLabels: Record<number, string>;
+  upliftDurationLabels: Record<number, string>;
+  /** Default uplift duration when no DOL factor is available */
+  defaultUplift: number;
+  /** Default download duration when no DOL factor is available */
+  defaultDownload: number;
+}
+
+export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
+  us: {
+    label: 'USA',
+    buildingCode: BUILDING_CODE_IRC2018,
+    buildingCodeNote: 'IRC 2018',
+    usesAnsitpi: true,
+    supportedTrussMaterials: [MATERIAL_TRUSS_DF, MATERIAL_TRUSS_HF, MATERIAL_TRUSS_SP, MATERIAL_TRUSS_SPF],
+    loadLabelSuffix: 'ASD',
+    codeLabels: {
+      0: 'None', 10: 'IBC 2018', 20: 'IRC 2018', 30: 'IBC 2021', 40: 'IRC 2021',
+    },
+    downloadDurationLabels: {
+      90: 'Dead (90)', 100: 'Floor (100)', 115: 'Snow (115)', 125: 'Roof (125)', 160: 'Quake/Wind (160)',
+    },
+    upliftDurationLabels: { 100: 'Normal (100)', 160: 'Quake/Wind (160)' },
+    defaultUplift: UL_DURATION_WIND_QUAKE,
+    defaultDownload: DL_DURATION_ROOF,
+  },
+  can: {
+    label: 'CAN',
+    buildingCode: BUILDING_CODE_CAN_DEFAULT,
+    buildingCodeNote: 'Canada (code 41)',
+    usesAnsitpi: false,
+    supportedTrussMaterials: [MATERIAL_TRUSS_DF, MATERIAL_TRUSS_SPF],
+    loadLabelSuffix: 'LSD',
+    codeLabels: { 40: 'Canada (40)', 41: 'Canada (41)', 42: 'Canada (42)' },
+    downloadDurationLabels: { 100: 'Standard Term 1.00' },
+    upliftDurationLabels: { 100: 'Standard Term 1.00', 115: 'Short Term 1.15' },
+    defaultUplift: UL_DURATION_SHORT_TERM,
+    defaultDownload: DL_DURATION_STANDARD_TERM,
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Flush option
 // ---------------------------------------------------------------------------
 

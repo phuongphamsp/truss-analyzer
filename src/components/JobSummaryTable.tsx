@@ -18,7 +18,8 @@ import { isInStock } from '../lib/inventory';
 import { Package, PackageCheck, Download, AlertCircle, FileSpreadsheet, Loader2, CheckCircle2, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { loadInventoryFile } from '../lib/inventory';
-import { buildSSTPayload } from '../lib/sst-mapper';
+import { buildSSTPayload, getRegionIssues } from '../lib/sst-mapper';
+import { useRegion } from '../lib/region';
 import { submitToSST, hasSSTToken } from '../lib/sst-api';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,7 @@ export function JobSummaryTable({
   onInventoryChange,
   onHangersLoaded,
 }: JobSummaryTableProps) {
+  const region = useRegion();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
 
@@ -161,8 +163,17 @@ export function JobSummaryTable({
       }
 
       const carried = item.group.carriedTrusses[item.carriedIdx];
+
+      // Region does not support this connection (e.g. HF/SP lumber in CAN) — skip, no API call
+      if (getRegionIssues(item.group, carried, region).length > 0) {
+        failed++;
+        completed++;
+        setBatchProgress(prev => prev ? { ...prev, completed, failed, running: completed < pending.length } : null);
+        continue;
+      }
+
       try {
-        const payload = buildSSTPayload(item.group, carried);
+        const payload = buildSSTPayload(item.group, carried, region);
         const res = await submitToSST(payload);
         if (res.success) {
           onHangersLoaded(item.girderId, item.carriedId, res.hangers);
@@ -189,14 +200,14 @@ export function JobSummaryTable({
     }
 
     setBatchProgress(prev => prev ? { ...prev, running: false } : null);
-  }, [girders, hangerResultsMap, onHangersLoaded]);
+  }, [girders, hangerResultsMap, onHangersLoaded, region]);
 
-  // Auto-run on mount
+  // Auto-run on mount and when the region changes (results are cleared on region change)
   useEffect(() => {
     runBatchQuery();
     return () => { abortRef.current = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally run only on mount (tab open)
+  }, [region]);
 
   // Build the selected-hanger rows for all connections
   const rows: SelectedHanger[] = useMemo(() => {

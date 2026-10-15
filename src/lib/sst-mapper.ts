@@ -15,7 +15,7 @@
  */
 
 import type { GirderGroup, CarriedTruss, TreData } from '../types';
-import type { SSTPayload, SSTCarriedMember, SSTCarryingMember } from './sst-types';
+import type { SSTPayload, SSTCarriedMember, SSTCarryingMember, SSTRegion } from './sst-types';
 import {
   MATERIAL_TRUSS,
   MATERIAL_TRUSS_DF,
@@ -24,7 +24,12 @@ import {
   MATERIAL_TRUSS_SPF,
   ANSITPI_END,
   ANSITPI_INTERIOR,
-  BUILDING_CODE_IRC2018,
+  ANSITPI_OFF,
+  DEFAULT_REGION,
+  REGION_CONFIG,
+  DL_DURATION_STANDARD_TERM,
+  UL_DURATION_STANDARD_TERM,
+  UL_DURATION_SHORT_TERM,
   STYLE_ALL,
   FASTENER_ALL,
   FLUSH_BOTTOM,
@@ -89,8 +94,13 @@ function speciesStringToMaterial(speciesOrSpec: string | undefined): number {
  *
  * SST duration constants are factor × 100 (e.g. Roof 125 = 125).
  */
-function dolFactorToDownloadDuration(dolFactor: number | undefined): number {
-  if (dolFactor === undefined || dolFactor === null) return DL_DURATION_ROOF; // default
+function dolFactorToDownloadDuration(
+  dolFactor: number | undefined,
+  region: SSTRegion = DEFAULT_REGION
+): number {
+  // CAN selector only offers "Standard Term 1.00" for download duration
+  if (region === 'can') return DL_DURATION_STANDARD_TERM;
+  if (dolFactor === undefined || dolFactor === null) return REGION_CONFIG[region].defaultDownload;
   const f = Math.round(dolFactor * 100); // e.g. 1.15 → 115, 1.60 → 160
   if (f <= 90)  return DL_DURATION_DEAD;
   if (f <= 100) return DL_DURATION_FLOOR;
@@ -99,10 +109,15 @@ function dolFactorToDownloadDuration(dolFactor: number | undefined): number {
   return DL_DURATION_WIND_QUAKE; // 160
 }
 
-function dolFactorToUpliftDuration(dolFactor: number | undefined): number {
-  if (dolFactor === undefined || dolFactor === null) return UL_DURATION_WIND_QUAKE; // default
-  // >= 1.33 (Wind/Seismic) → 160; < 1.33 (Snow/Roof/Floor/Dead) → 100
-  return dolFactor >= 1.33 ? UL_DURATION_WIND_QUAKE : UL_DURATION_NORMAL;
+function dolFactorToUpliftDuration(
+  dolFactor: number | undefined,
+  region: SSTRegion = DEFAULT_REGION
+): number {
+  if (dolFactor === undefined || dolFactor === null) return REGION_CONFIG[region].defaultUplift;
+  // >= 1.33 (Wind/Seismic) → 160 (CAN: Short Term 115); < 1.33 → 100 (CAN: Standard Term)
+  const isShortTerm = dolFactor >= 1.33;
+  if (region === 'can') return isShortTerm ? UL_DURATION_SHORT_TERM : UL_DURATION_STANDARD_TERM;
+  return isShortTerm ? UL_DURATION_WIND_QUAKE : UL_DURATION_NORMAL;
 }
 
 
@@ -256,6 +271,57 @@ export function computeAnsitpi(
   };
 }
 
+/** Bottom-chord species string of the girder (carrying member) */
+function getGirderSpecies(group: GirderGroup): string | undefined {
+  return (
+    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? group.girder.treData?.bottomChord
+    ?? group.girder.ifcBottomChord
+  );
+}
+
+/** Bottom-chord species string of the carried truss */
+function getCarriedSpecies(carried: CarriedTruss): string | undefined {
+  return (
+    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    ?? carried.treData?.bottomChord
+  );
+}
+
+const MATERIAL_SPECIES_NAME: Record<number, string> = {
+  [MATERIAL_TRUSS_DF]: 'DF',
+  [MATERIAL_TRUSS_HF]: 'HF',
+  [MATERIAL_TRUSS_SP]: 'SP',
+  [MATERIAL_TRUSS_SPF]: 'SPF',
+};
+
+/**
+ * Reasons why the hanger lookup cannot run for this connection in the given
+ * region (e.g. HF / SP lumber is not offered by the CAN selector).
+ * Empty array = OK to query.
+ */
+export function getRegionIssues(
+  group: GirderGroup,
+  carried: CarriedTruss,
+  region: SSTRegion
+): string[] {
+  const supported = REGION_CONFIG[region].supportedTrussMaterials;
+  const issues: string[] = [];
+  const check = (who: string, species: string | undefined) => {
+    const material = speciesStringToMaterial(species);
+    if (!supported.includes(material)) {
+      const name = MATERIAL_SPECIES_NAME[material] ?? String(material);
+      const allowed = supported.map((m) => MATERIAL_SPECIES_NAME[m] ?? m).join(', ');
+      issues.push(
+        `${who} species ${name} is not available in ${REGION_CONFIG[region].label} (supported: ${allowed}).`
+      );
+    }
+  };
+  check('Girder', getGirderSpecies(group));
+  check('Carried truss', getCarriedSpecies(carried));
+  return issues;
+}
+
 /**
  * Get heel height at the bearing side of a carried truss.
  * Falls back to the other side, then to 3.5" (2x4 depth).
@@ -277,11 +343,13 @@ function getCarriedDepth(carried: CarriedTruss): number {
  *
  * @param group   The girder group containing the girder instance
  * @param carried The specific carried truss to query hangers for
+ * @param region  'us' (default) or 'can' — selects building code, durations, ANSI/TPI handling
  * @returns       Complete SSTPayload ready to POST to the API
  */
 export function buildSSTPayload(
   group: GirderGroup,
-  carried: CarriedTruss
+  carried: CarriedTruss,
+  region: SSTRegion = DEFAULT_REGION
 ): SSTPayload {
   // --- Carrying member (girder) ---
   const girderBC = findBottomChord(group.girder.treData?.members);
@@ -307,11 +375,7 @@ export function buildSSTPayload(
   // Species → material code for girder (carrying member).
   // Use the bottom chord species from cuttingMembers (authoritative) or
   // fall back to the majority bottomChord spec string (e.g. "2x6 No.2 SP").
-  const girderSpecies =
-    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
-    ?? group.girder.treData?.bottomChord
-    ?? group.girder.ifcBottomChord;
-  const girderMaterial = speciesStringToMaterial(girderSpecies);
+  const girderMaterial = speciesStringToMaterial(getGirderSpecies(group));
 
   const carryingMember: SSTCarryingMember = {
     material: girderMaterial,
@@ -339,10 +403,7 @@ export function buildSSTPayload(
   // Species → material code for carried truss.
   // Use the bottom chord species from cuttingMembers (authoritative) or
   // fall back to the majority bottomChord spec string (e.g. "2x4 No.2 SP").
-  const carriedSpecies =
-    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
-    ?? carried.treData?.bottomChord;
-  const carriedMaterial = speciesStringToMaterial(carriedSpecies);
+  const carriedMaterial = speciesStringToMaterial(getCarriedSpecies(carried));
 
   // Skew angle — derived from LG*T field[14] (angle of carried truss relative to girder).
   // If hangerAngle in [0, 180]  → skewAngle = hangerAngle - 90   (range: -90 to +90)
@@ -389,20 +450,22 @@ export function buildSSTPayload(
     },
   };
 
-  // ANSI/TPI 1 connection type — computed from hanger distance vs 5d rule
-  const ansitpiResult = computeAnsitpi(group, carried);
+  // ANSI/TPI 1 connection type — computed from hanger distance vs 5d rule.
+  // Not applicable in CAN (selector hides it and sends 0).
+  const config = REGION_CONFIG[region];
+  const ansitpi = config.usesAnsitpi ? computeAnsitpi(group, carried).ansitpi : ANSITPI_OFF;
 
   // --- Full payload ---
   return {
     style: STYLE_ALL,
-    buildingCode: BUILDING_CODE_IRC2018,
+    buildingCode: config.buildingCode,
     concealed: 0,
     fastenerType: FASTENER_ALL,
     sort: 0,
     ledger: 0,
     designInformations: {
-      downloadDurationType:   dolFactorToDownloadDuration(carried.downDolFactor),
-      upliftLoadDurationType: dolFactorToUpliftDuration(carried.upliftDolFactor),
+      downloadDurationType:   dolFactorToDownloadDuration(carried.downDolFactor, region),
+      upliftLoadDurationType: dolFactorToUpliftDuration(carried.upliftDolFactor, region),
     },
     filters: {
       depth: 0,
@@ -414,7 +477,7 @@ export function buildSSTPayload(
     carriedMembers: [carriedMember],
     flushOption: FLUSH_BOTTOM,
     carryingMember: carryingMember,
-    ansitpi: ansitpiResult.ansitpi,
+    ansitpi,
   };
 }
 
@@ -423,12 +486,13 @@ export function buildSSTPayload(
  * Returns array of [CarriedTruss, SSTPayload] pairs.
  */
 export function buildBatchPayloads(
-  group: GirderGroup
+  group: GirderGroup,
+  region: SSTRegion = DEFAULT_REGION
 ): Array<{ carried: CarriedTruss; payload: SSTPayload }> {
   return group.carriedTrusses
     .filter((ct) => ct.downReaction != null && ct.downReaction > 0)
     .map((ct) => ({
       carried: ct,
-      payload: buildSSTPayload(group, ct),
+      payload: buildSSTPayload(group, ct, region),
     }));
 }

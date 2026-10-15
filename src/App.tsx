@@ -10,7 +10,9 @@ import { analyzeFiles } from './lib/parser';
 import { FileSpreadsheet } from 'lucide-react';
 import { cn } from './lib/utils';
 import type { ParsedInventory } from './lib/inventory';
-import type { SSTHangerResult } from './lib/sst-types';
+import type { SSTHangerResult, SSTRegion } from './lib/sst-types';
+import { REGION_CONFIG } from './lib/sst-types';
+import { RegionContext, loadStoredRegion, storeRegion } from './lib/region';
 
 import t07Raw from '../t07.tre.txt?raw';
 import t02Raw from '../t02.tre.txt?raw';
@@ -29,6 +31,16 @@ export default function App() {
 
   // Map of hanger results per connection: key = `${girderId}::${carriedInstanceId}`
   const [hangerResultsMap, setHangerResultsMap] = useState<HangerResultsMap>({});
+
+  // Region (USA / CAN) — drives building code, durations, ANSI/TPI and labels
+  const [region, setRegion] = useState<SSTRegion>(loadStoredRegion);
+
+  const handleRegionChange = useCallback((next: SSTRegion) => {
+    setRegion(next);
+    storeRegion(next);
+    // Hanger results were queried for the previous region — discard them
+    setHangerResultsMap({});
+  }, []);
 
   const handleHangersLoaded = useCallback((girderId: string, carriedId: string, hangers: SSTHangerResult[]) => {
     const key = `${girderId}::${carriedId}`;
@@ -88,6 +100,7 @@ export default function App() {
   const resolvedCount = Object.keys(hangerResultsMap).length;
 
   return (
+    <RegionContext.Provider value={region}>
     <div className="h-screen w-full bg-[#E4E3E0] text-[#141414] font-sans flex flex-col overflow-hidden select-none">
         <header className="h-14 border-b border-[#141414] flex items-center justify-between px-6 bg-[#D4D3D0] shrink-0">
             <div className="flex items-center space-x-4">
@@ -128,7 +141,24 @@ export default function App() {
                     )}
                 </button>
             </div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2" title="Hanger Selector country">
+                <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">Country</span>
+                <div className="flex items-center gap-1">
+                    {(Object.keys(REGION_CONFIG) as SSTRegion[]).map(r => (
+                        <button
+                            key={r}
+                            onClick={() => handleRegionChange(r)}
+                            className={cn(
+                                'px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-colors',
+                                region === r
+                                    ? 'bg-[#141414] text-white'
+                                    : 'text-[#141414] hover:bg-[#141414]/10'
+                            )}
+                        >
+                            {REGION_CONFIG[r].label}
+                        </button>
+                    ))}
+                </div>
             </div>
         </header>
 
@@ -181,5 +211,6 @@ export default function App() {
             <div className="text-[9px] font-mono opacity-40">2023-10-27 14:42:01</div>
         </footer>
     </div>
+    </RegionContext.Provider>
   );
 }
