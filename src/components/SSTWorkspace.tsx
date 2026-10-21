@@ -441,8 +441,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web the carried truss fits inside' : 'no vertical web under the carried truss'} />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'lower top edge of vertical web' : 'no king post'} />
               </>
             )}
             <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
@@ -570,8 +570,8 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
-                <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="vertical web height if king post found, otherwise BC depth — overall girder height at connection point" />
-                <MappingRow2 label="Vertical Width (King Post)" badge="Computed" badgeColor="amber" note="Scans Web members for vertical segment at connection X ±2&quot; · width of that web member" />
+                <MappingRow2 label="Total Height (King)" badge="Computed" badgeColor="amber" note="lower top edge of the vertical web if king post found, otherwise 0 — overall girder height at connection point" />
+                <MappingRow2 label="Vertical Width (King Post)" badge="Computed" badgeColor="amber" note="Vertical Web member that the whole carried truss fits inside (hanger position = truss center, skew widens the truss) · width = face depth of that web" />
               </div>
 
               {/* CARRIED MEMBER */}

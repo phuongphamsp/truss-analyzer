@@ -498,8 +498,8 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
             <Row label="Number of Plies" value={String(cm.ply)} sourceType="default" sourceNote="not in TRE" />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web at connection point' : 'no vertical web detected'} />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web segment height' : 'from girder heel height'} />
+                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web the carried truss fits inside' : 'no vertical web under the carried truss'} />
+                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'lower top edge of vertical web' : 'no king post'} />
               </>
             )}
             <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />

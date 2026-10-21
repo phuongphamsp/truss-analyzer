@@ -152,64 +152,84 @@ interface KingPostResult {
 }
 
 /**
+ * Width (inches) that a carried truss occupies along the girder at its hanger.
+ *
+ * = thickness of the carried truss (bottom chord width x plies), widened for skew:
+ *   a truss skewed by theta meets the girder with a cut face of thickness / cos(theta).
+ * The hanger position in the TRE (LG*T field[2]) is the CENTER of the carried truss
+ * (confirmed by tester), so the truss spans [x - w/2, x + w/2].
+ */
+function carriedFootprintWidth(carried: CarriedTruss): number {
+  const bc = findBottomChord(carried.treData?.members);
+  const thickness = (bc?.width ?? 1.5) * (carried.treData?.ply ?? 1);
+  const hangerAngle = carried.hangerAngle ?? 90;
+  const rawSkew = hangerAngle <= 180 ? hangerAngle - 90 : hangerAngle - 270;
+  const cos = Math.cos((Math.abs(rawSkew) * Math.PI) / 180);
+  return thickness / Math.max(cos, 1e-6); // ~90 deg skew => huge width => never fits
+}
+
+/**
  * Detect whether a vertical web (king post) exists at the connection point
  * of a carried truss on the girder.
  *
- * Strategy (per tester spec):
- * 1. For each Web member, compute midpoint X = (x_min + x_max) / 2 of all coords.
- * 2. Check if midpoint X is within TOLERANCE of connectionX.
- * 3. Verify the web is vertical: all coords share the same two distinct x values
- *    (i.e. x1=x4 and x2=x3 in the 4-point rectangle layout).
- * 4. Extract:
+ * Rule (confirmed by tester review):
+ * 1. Only vertical Web members are considered: exactly 2 distinct x values
+ *    (left face & right face) and a meaningful y range.
+ * 2. The carried truss must FIT INSIDE the vertical: its whole footprint
+ *    [connectionX - w/2, connectionX + w/2] must lie within [xLeft, xRight].
+ *    If any part sticks out, there is no king post (N/A).
+ * 3. Extract:
  *    - kingWidth  = lumber depth (face width toward hanger, e.g. 3.5" for 2x4)
- *    - kingHeight = max(y) across all coords of the web member
- *                  (absolute height from bottom of girder to top of king post)
+ *    - kingHeight = the LOWER of the two top edges of the vertical
+ *                  (the top of the vertical follows the roof slope)
+ *
+ * @param footprintWidth width of the carried truss along the girder (see carriedFootprintWidth)
  */
 function findKingPost(
   members: TreData['members'],
-  connectionX: number
+  connectionX: number,
+  footprintWidth: number
 ): KingPostResult {
-  const TOLERANCE = 2.0; // inches — snap tolerance for midpoint match
+  const EPS = 0.001; // inches — floating point slack when comparing edges
 
   if (!members || members.length === 0) {
     return { hasKingPost: false, kingWidth: 0, kingHeight: 0 };
   }
 
   const webMembers = members.filter(m => m.type === 'Web' && m.isStructural);
+  const round3 = (v: number) => Math.round(v * 1000) / 1000;
 
   for (const web of webMembers) {
     const coords = web.coords;
     if (coords.length < 2) continue;
 
-    const xs = coords.map(c => c.x);
+    const xs = coords.map(c => round3(c.x));
     const ys = coords.map(c => c.y);
 
-    // Midpoint X of the web member (tester: (x_left + x_right) / 2)
-    const xMin = Math.min(...xs);
-    const xMax = Math.max(...xs);
-    const midX = (xMin + xMax) / 2;
-
-    // Check if this web is at the connection point
-    if (Math.abs(midX - connectionX) > TOLERANCE) continue;
-
-    // Check if the web is vertical:
     // A vertical king post has exactly 2 distinct x values (left face & right face)
     // and the y range must be meaningful (not a degenerate point)
-    const uniqueXs = [...new Set(xs.map(x => Math.round(x * 1000) / 1000))];
+    const uniqueXs = [...new Set(xs)].sort((p, q) => p - q);
     const yRange = Math.max(...ys) - Math.min(...ys);
-    const isVertical = uniqueXs.length === 2 && yRange > 0.5;
+    if (uniqueXs.length !== 2 || yRange <= 0.5) continue;
 
-    if (isVertical) {
-      return {
-        hasKingPost: true,
-        // Face width toward hanger = lumber depth (e.g. 3.5" for 2x4)
-        // web.width = thickness (1.5"), web.depth = face depth (3.5")
-        kingWidth: web.depth,
-        // Total Height = max(y) of the web member = absolute height from girder bottom
-        // to top of king post (tester: "lấy cặp y lớn hơn")
-        kingHeight: Math.max(...ys),
-      };
-    }
+    const [xLeft, xRight] = uniqueXs;
+
+    // The carried truss must fit entirely inside the vertical
+    const half = footprintWidth / 2;
+    if (connectionX - half < xLeft - EPS || connectionX + half > xRight + EPS) continue;
+
+    // Top edge of each face; the vertical's top follows the roof slope, use the lower one
+    const topOf = (x: number) =>
+      Math.max(...coords.filter(c => round3(c.x) === x).map(c => c.y));
+    const kingHeight = Math.min(topOf(xLeft), topOf(xRight));
+
+    return {
+      hasKingPost: true,
+      // Face width toward hanger = lumber depth (e.g. 3.5" for 2x4)
+      // web.width = thickness (1.5"), web.depth = face depth (3.5")
+      kingWidth: web.depth,
+      kingHeight,
+    };
   }
 
   return { hasKingPost: false, kingWidth: 0, kingHeight: 0 };
@@ -356,11 +376,12 @@ export function buildSSTPayload(
   const girderWidth = girderBC?.width ?? 1.5;
   const girderDepth = girderBC?.depth ?? 5.5;
 
-  // Detect king post (vertical web) at the connection point of this carried truss.
-  // connectionX = localX of the carried truss along the girder span.
+  // Detect king post (vertical web) under this carried truss: the whole truss must fit
+  // inside the vertical. connectionX = localX (center of the carried truss) along the girder.
   const kingPost = findKingPost(
     group.girder.treData?.members,
-    carried.localX
+    carried.localX,
+    carriedFootprintWidth(carried)
   );
 
   // kingHeight: use actual vertical segment height if king post found,
