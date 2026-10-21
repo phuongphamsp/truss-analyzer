@@ -759,15 +759,23 @@ function parseTre(text: string, filename: string): TreData | null {
   let pitch = 0;
   let members: TreMember[] = [];
   
-  let isGirder = false;
+  // Girder detection:
+  //  - explicitGirder: the TRE's own "Girder=YES/NO" flag. Authoritative when present.
+  //  - heuristicGirder: name/section hints (e.g. "TRUSS TYPE=... Girder"). Only used when the
+  //    file has no explicit flag, because a type name like "Diagonal Hip Girder" can appear
+  //    with "Girder=NO" (a truss that carries nothing).
+  //  - A truss with hangers (LG*T entries) always carries other trusses (decided after parsing).
+  let heuristicGirder = false;
+  let explicitGirder: boolean | null = null;
   // Roof Basics
   for (let i = 0; i < lines.length - 1; i++) {
     const line = lines[i].trim();
     if (line.toUpperCase().startsWith('TRUSS TYPE=') && line.toLowerCase().includes('girder')) {
-      isGirder = true;
+      heuristicGirder = true;
     }
-    if (line.toUpperCase() === 'GIRDER=YES') {
-      isGirder = true;
+    if (explicitGirder === null) {
+      if (line.toUpperCase() === 'GIRDER=YES') explicitGirder = true;
+      else if (line.toUpperCase() === 'GIRDER=NO') explicitGirder = false;
     }
     if (line === 'TRUSS INFO') {
       let j = 1;
@@ -776,7 +784,7 @@ function parseTre(text: string, filename: string): TreData | null {
         if (l.startsWith('[')) break;
         // Avoid matching "Girder=NO" if somehow it appears here
         if (l.toLowerCase().includes('girder') && !l.toUpperCase().includes('GIRDER=NO')) {
-           isGirder = true;
+           heuristicGirder = true;
         }
         j++;
       }
@@ -787,10 +795,7 @@ function parseTre(text: string, filename: string): TreData | null {
         const l = lines[i+j].trim();
         if (l.startsWith('[')) break;
         if (l.toUpperCase().startsWith('TRUSS TYPE=') && l.toLowerCase().includes('girder')) {
-           isGirder = true;
-        }
-        if (l.toUpperCase() === 'GIRDER=YES') {
-           isGirder = true;
+           heuristicGirder = true;
         }
         j++;
       }
@@ -799,7 +804,7 @@ function parseTre(text: string, filename: string): TreData | null {
        if (i + 1 < lines.length) {
            const nextLine = lines[i+1].trim();
            if (nextLine && nextLine !== '[DATES]' && !nextLine.startsWith('[')) {
-               isGirder = true; 
+               heuristicGirder = true;
            }
        }
     }
@@ -877,9 +882,7 @@ function parseTre(text: string, filename: string): TreData | null {
   const maxReaction = Math.max(reactions.leftDown, reactions.rightDown);
   const dol = parseDOL(text);
   const hangers = parseHangers(text);
-  if (hangers.length > 0) {
-    isGirder = true;
-  }
+  const isGirder = hangers.length > 0 || (explicitGirder ?? heuristicGirder);
 
   const defaults = getDefaultReactions(label);
   let leftHeel = defaults.leftHeel;
@@ -1478,74 +1481,17 @@ function analyzeConnections(instances: TrussInstance[], treMap: Map<string, TreD
 
   girders.forEach(girder => {
       girder.treData = findTreForLabel(girder.label, treMap) || undefined;
-      // Filter carried trusses by looking at those perpendicular/near-coordinate if fallback,
-      // or filter so they have consistent label types. 
-      // S01 or T02, not mixed.
-      // Let's make fallback carry-set realistic:
-      let belongsToThisGirder = [...carried];
-      if (girder.label === 'T07') {
-         belongsToThisGirder = carried.filter(c => c.label.startsWith('T02'));
-      } else if (girder.label.includes('T06GE')) {
-         belongsToThisGirder = carried.filter(c => c.label.startsWith('T08') || c.label.startsWith('T09'));
-      }
-
-      belongsToThisGirder.sort((a, b) => {
-          return a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: 'base' });
-      });
-      
-      if (girder.treData && girder.treData.hangers && girder.treData.hangers.length > 0) {
-          const carriedTrusses = computeCarriedTrussGeometry(girder, carried, treMap);
-          enrichCarriedTrusses(carriedTrusses, girder);
-          if (carriedTrusses.length > 0) {
-             groups.push({ girder, carriedTrusses });
-          }
+      // Only a girder that actually has hangers (LG*T entries in its TRE) carries other trusses.
+      // A truss flagged as girder without hangers carries nothing, so it yields no group
+      // (previously every other truss was listed as carried at a made-up 24" spacing).
+      if (!girder.treData || !girder.treData.hangers || girder.treData.hangers.length === 0) {
           return;
       }
 
-      let currentX = girder.label === "G01" ? 10.10417 * 12 : 21.5;
-      
-      const carriedTrusses: CarriedTruss[] = belongsToThisGirder.map((c, idx) => {
-          const baseLabel = c.label.split('-')[0].toUpperCase();
-          const defaultData: TreData = {
-              label: baseLabel,
-              topChord: "Unknown",
-              bottomChord: "Unknown",
-              webs: "Unknown",
-              maxReaction: 0
-          };
-          
-          const treData = findTreForLabel(c.label, treMap) || findTreForLabel(baseLabel, treMap) || defaultData;
-
-          let spacing: number | null = null;
-          if (idx > 0) {
-              spacing = 24.0;
-              currentX += spacing;
-          } else {
-              if (c.leftEnd && girder.leftEnd) {
-                  currentX = Math.abs(c.leftEnd.x - girder.leftEnd.x);
-              } else {
-                  currentX = 21.5;
-              }
-          }
-
-          return {
-              instance: c,
-              localX: currentX,
-              spacing,
-              treData,
-              distFromGE: currentX,
-              angle: 90,
-              rotation: 90,
-              side: 'above',
-              member: 'Unknown',
-              memberSize: 'Unknown'
-          };
-      });
-
+      const carriedTrusses = computeCarriedTrussGeometry(girder, carried, treMap);
       enrichCarriedTrusses(carriedTrusses, girder);
-
       if (carriedTrusses.length > 0) {
-        groups.push({ girder, carriedTrusses });
+         groups.push({ girder, carriedTrusses });
       }
   });
 
