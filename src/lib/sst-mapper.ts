@@ -28,8 +28,6 @@ import {
   DEFAULT_REGION,
   REGION_CONFIG,
   DL_DURATION_STANDARD_TERM,
-  UL_DURATION_STANDARD_TERM,
-  UL_DURATION_SHORT_TERM,
   STYLE_ALL,
   FASTENER_ALL,
   FLUSH_BOTTOM,
@@ -114,10 +112,20 @@ function dolFactorToUpliftDuration(
   region: SSTRegion = DEFAULT_REGION
 ): number {
   if (dolFactor === undefined || dolFactor === null) return REGION_CONFIG[region].defaultUplift;
-  // >= 1.33 (Wind/Seismic) → 160 (CAN: Short Term 115); < 1.33 → 100 (CAN: Standard Term)
-  const isShortTerm = dolFactor >= 1.33;
-  if (region === 'can') return isShortTerm ? UL_DURATION_SHORT_TERM : UL_DURATION_STANDARD_TERM;
-  return isShortTerm ? UL_DURATION_WIND_QUAKE : UL_DURATION_NORMAL;
+
+  if (region === 'can') {
+    // CAN: the duration code is the DOL straight from REACTION INFO x 100
+    // (1.00 → 100 Standard Term, 1.15 → 115 Short Term). A DOL that is not one of the
+    // CAN options is snapped to the nearest option (ties go to the lower, i.e. 100):
+    // above 1.15 (e.g. 1.25, 1.60) → Short Term 1.15, below 1.00 (e.g. 0.65, 0.90) → Standard Term 1.00.
+    // Provisional rule, pending tester confirmation.
+    const code = Math.round(dolFactor * 100);
+    const options = Object.keys(REGION_CONFIG.can.upliftDurationLabels).map(Number).sort((a, b) => a - b);
+    return options.reduce((best, o) => (Math.abs(o - code) < Math.abs(best - code) ? o : best), options[0]);
+  }
+
+  // USA: >= 1.33 (Wind/Seismic) → 160; < 1.33 → 100 (Normal)
+  return dolFactor >= 1.33 ? UL_DURATION_WIND_QUAKE : UL_DURATION_NORMAL;
 }
 
 
