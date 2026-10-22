@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { LogPanel } from './components/LogPanel';
 import { GirderList } from './components/GirderList';
@@ -13,6 +13,7 @@ import type { ParsedInventory } from './lib/inventory';
 import type { SSTHangerResult, SSTRegion } from './lib/sst-types';
 import { REGION_CONFIG } from './lib/sst-types';
 import { RegionContext, loadStoredRegion, storeRegion } from './lib/region';
+import { applyRegionReactions } from './lib/reactions';
 
 import t07Raw from '../t07.tre.txt?raw';
 import t02Raw from '../t02.tre.txt?raw';
@@ -94,7 +95,9 @@ export default function App() {
     return () => { isMounted = false; };
   }, [handleLog]);
 
-  const selectedGirder = girders.find(g => g.girder.id === selectedGirderId) || null;
+  // Reactions depend on the region (CAN ignores load cases with a DOL outside 0.65 / 1.00 / 1.15)
+  const regionGirders = useMemo(() => applyRegionReactions(girders, region), [girders, region]);
+  const selectedGirder = regionGirders.find(g => g.girder.id === selectedGirderId) || null;
 
   // Count resolved connections for the tab badge
   const resolvedCount = Object.keys(hangerResultsMap).length;
@@ -170,7 +173,7 @@ export default function App() {
                 </div>
                 <div className="flex-1 flex flex-col min-h-0">
                     <GirderList 
-                        girders={girders} 
+                        girders={regionGirders}
                         selectedId={selectedGirderId}
                         onSelect={(id) => { setSelectedGirderId(id); setActiveTab('analyzer'); }} 
                     />
@@ -192,7 +195,7 @@ export default function App() {
                 {activeTab === 'summary' && (
                     <div className="flex-1 flex overflow-hidden">
                         <JobSummaryTable
-                            girders={girders}
+                            girders={regionGirders}
                             hangerResultsMap={hangerResultsMap}
                             inventory={inventory}
                             onInventoryChange={setInventory}

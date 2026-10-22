@@ -82,6 +82,12 @@ export interface TrussInstance {
   ifcWebs?: string;
 }
 
+/** One governing reaction at a connection bearing (REACTION INFO) with its load case DOL */
+export interface ReactionEntry {
+  value: number;
+  dolFactor: number;
+}
+
 export interface CarriedTruss {
   instance: TrussInstance;
   localX: number;
@@ -100,6 +106,7 @@ export interface CarriedTruss {
   upliftDolFactor?: number; // DOL factor of the LC that produced upliftReaction (e.g. 1.6)
   hangerAngle?: number;     // LG*T field[14]: angle of carried truss relative to girder (degrees)
   hanger?: NonNullable<TreData['hangers']>[number]; // the LG*T hanger entry this carried truss was created from
+  reactionEntries?: ReactionEntry[]; // every governing reaction at the bearing + its DOL, so the region can pick the eligible ones
 }
 
 export interface GirderGroup {

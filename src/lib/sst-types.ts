@@ -130,6 +130,11 @@ export interface SSTRegionConfig {
   defaultUplift: number;
   /** Default download duration when no DOL factor is available */
   defaultDownload: number;
+  /**
+   * DOL factors that exist in this region's REACTION INFO. Load cases with any other DOL
+   * are ignored when picking the Download / Uplift reaction. null = use every load case.
+   */
+  validDols: number[] | null;
 }
 
 export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
@@ -149,6 +154,7 @@ export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
     upliftDurationLabels: { 100: 'Normal (100)', 160: 'Quake/Wind (160)' },
     defaultUplift: UL_DURATION_WIND_QUAKE,
     defaultDownload: DL_DURATION_ROOF,
+    validDols: null,
   },
   can: {
     label: 'CAN',
@@ -162,6 +168,7 @@ export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
     upliftDurationLabels: { 100: 'Standard Term 1.00', 115: 'Short Term 1.15' },
     defaultUplift: UL_DURATION_SHORT_TERM,
     defaultDownload: DL_DURATION_STANDARD_TERM,
+    validDols: [0.65, 1.0, 1.15],
   },
 };
 

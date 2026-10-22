@@ -1,4 +1,5 @@
 import { GirderGroup, TrussInstance, TreData, CarriedTruss, Point3D, BoundingBox } from '../types';
+import { pickReactions } from './reactions';
 
 export type LogCallback = (msg: string, type?: 'info'|'success'|'error'|'warning') => void;
 
@@ -1003,7 +1004,7 @@ const BEARING_LOCATION_TOLERANCE = 4.1; // inches — covers floating point drif
 function parseReactionAtBearing(
   carriedTreTxt: string,
   targetBearing: number
-): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number } | null {
+): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number | undefined; entries: Array<{ value: number; dolFactor: number }> } | null {
   const lines = carriedTreTxt.split('\n');
 
   // Tìm REACTION INFO section
@@ -1083,20 +1084,15 @@ function parseReactionAtBearing(
 
   if (entries.length === 0) return null;
 
-  // downReaction = max value → pick its dolFactor
-  const downEntry   = entries.reduce((a, b) => b.value > a.value ? b : a);
-  // upliftReaction = min value → pick its dolFactor
-  const upliftEntry = entries.reduce((a, b) => b.value < a.value ? b : a);
-
-  // Only treat as uplift if the minimum value is actually negative
-  const hasUplift = upliftEntry.value < 0;
+  // downReaction = max value, upliftReaction = min value (only if negative), each with the
+  // DOL of its load case. Region-specific filtering of load cases is applied later
+  // (see applyRegionReactions); here every load case is eligible.
+  const picked = pickReactions(entries)!;
 
   return {
-    downReaction:    downEntry.value,
-    upliftReaction:  hasUplift ? upliftEntry.value : 0,
-    bearingSide:     resolvedBearingSide ?? 'left',
-    downDolFactor:   downEntry.dolFactor,
-    upliftDolFactor: hasUplift ? upliftEntry.dolFactor : undefined,
+    ...picked,
+    bearingSide: resolvedBearingSide ?? 'left',
+    entries,
   };
 }
 
@@ -1160,6 +1156,7 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
         c.bearingSide     = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
         c.downDolFactor   = result.downDolFactor;
         c.upliftDolFactor = result.upliftDolFactor;
+        c.reactionEntries = result.entries;
         return;
       }
     }
