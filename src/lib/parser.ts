@@ -1130,7 +1130,9 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
   const girderHangers = girder.treData?.hangers || [];
 
   carriedTrusses.forEach((c, idx) => {
-    const hanger = girderHangers[idx];
+    // Use the hanger this truss was created from. Indexing girder.treData.hangers by position is wrong:
+    // that list is in TRE file order, while carried trusses are built from hangers sorted by x.
+    const hanger = c.hanger ?? girderHangers[idx];
     const carriedTreTxt = c.treData?.rawText;
 
     // --- TRE-based Bearing Detection (primary method) ---
@@ -1278,6 +1280,7 @@ function computeCarriedTrussGeometry(girder: TrussInstance, carriedInstances: Tr
         treData,
         spacing: null,
         hangerAngle: h.angle,  // LG*T field[14]: angle of carried truss relative to girder
+        hanger: h,             // keep the exact hanger this truss was built from (hangers are sorted by x here)
       });
     }
   } else {

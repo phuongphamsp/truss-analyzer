@@ -99,6 +99,7 @@ export interface CarriedTruss {
   downDolFactor?: number;   // DOL factor of the LC that produced downReaction (e.g. 1.15, 1.25)
   upliftDolFactor?: number; // DOL factor of the LC that produced upliftReaction (e.g. 1.6)
   hangerAngle?: number;     // LG*T field[14]: angle of carried truss relative to girder (degrees)
+  hanger?: NonNullable<TreData['hangers']>[number]; // the LG*T hanger entry this carried truss was created from
 }
 
 export interface GirderGroup {
