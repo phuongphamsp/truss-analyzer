@@ -467,7 +467,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
-              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
+              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="hanger line (LG*T 7th value)" />
             ) : (
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
@@ -582,9 +582,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: bottomChord spec string → default DF (5)" />
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Heel Height" badge="TRE" badgeColor="green"
-                  treSection="[TRUSS DETAILS]"
-                  treField="Left Heel Height= or Right Heel Height= (chosen by bearing side)"
-                  note="bearingSide=left → Left Heel Height · bearingSide=right → Right Heel Height"
+                  treSection="[Hanger Loading Info.]"
+                  treField="girder TRE hanger line LG{n}T= · 7th value after the = (e.g. 4.206)"
+                  note="taken as-is for this truss; only if missing: bearingSide=left → Left Heel Height, right → Right Heel Height"
                 />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
                 <MappingRow2 label={`Download (${loadSuffix})`} badge="Computed" badgeColor="amber"

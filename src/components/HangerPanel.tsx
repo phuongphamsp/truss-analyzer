@@ -527,7 +527,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
-              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="TRE heel at bearing side" />
+              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="hanger line (LG*T 7th value)" />
             ) : (
               <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}

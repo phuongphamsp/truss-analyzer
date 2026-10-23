@@ -351,10 +351,17 @@ export function getRegionIssues(
 }
 
 /**
- * Get heel height at the bearing side of a carried truss.
- * Falls back to the other side, then to 3.5" (2x4 depth).
+ * Heel height of a carried truss at the end that sits on the girder.
+ *
+ * Read directly from the girder's hanger line for this truss (tester spec): the 7th value
+ * after "=" of its LG*T entry, e.g. LG2T=0 1 50 0 J10 1.5 4.206 ... -> 4.206.
+ * Only when that value is missing falls back to the TRE's Left/Right Heel Height chosen by
+ * bearing side, then to 3.5" (2x4 depth).
  */
 function getCarriedDepth(carried: CarriedTruss): number {
+  const hangerHeel = carried.hanger?.heelHeight;
+  if (hangerHeel !== undefined && hangerHeel > 0) return hangerHeel;
+
   const tre = carried.treData;
   if (!tre) return 3.5;
   // Use heel height matching the bearing side (left/right)
