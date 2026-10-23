@@ -654,7 +654,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number }> = [];
+   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number; slope: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -674,6 +674,7 @@ function parseHangers(text: string) {
         const bearingLocation  = parts.length > 16 ? parseFloat(parts[16]) : 0;
         const angle            = parts.length > 14 ? parseFloat(parts[14]) : 90;
         const bearingSideFlag  = parts.length > 13 ? parseInt(parts[13]) : 0; // 0=left, 1=right
+        const slope            = parts.length > 10 ? parseFloat(parts[10]) : 0; // signed slope angle (degrees); > 0 Down, < 0 Up
         if (!isNaN(xInches)) {
           hangers.push({
             xFeet: xInches / 12,
@@ -684,6 +685,7 @@ function parseHangers(text: string) {
             bearingLocation: isNaN(bearingLocation) ? 0 : bearingLocation,
             angle: isNaN(angle) ? 90 : angle,
             bearingSideFlag,
+            slope: isNaN(slope) ? 0 : slope,
           });
         }
       }

@@ -454,7 +454,11 @@ export function buildSSTPayload(
     ? SKEW_TYPE_NONE
     : (rawSkew < 0 ? SKEW_TYPE_LEFT : SKEW_TYPE_RIGHT);
 
-  // Slope angle — derived from Bottom Chord Slopes of the carried truss at the bearing end.
+  // Slope angle — read directly from the hanger line of this carried truss (tester spec):
+  // the signed value at LG*T field[10] (block #12), > 0 = Down, < 0 = Up, 0 = None.
+  // Only when there is no hanger line, fall back to the Bottom Chord Slopes derivation below.
+  //
+  // Fallback: derived from Bottom Chord Slopes of the carried truss at the bearing end.
   // SST HS only understands slope as "chord going downward into the connection".
   // bearingSide='right' → last segment, keep sign as-is
   // bearingSide='left'  → first segment, negate (mirror) so the sign matches SST convention
@@ -466,10 +470,11 @@ export function buildSSTPayload(
     ? (carried.bearingSide === 'right' ? bcSlopes[bcSlopes.length - 1] : bcSlopes[0])
     : 0;
   const bcSlopeAtBearing = carried.bearingSide === 'left' ? -rawSlope : rawSlope;
-  const slopeAngle = Math.round(Math.abs(bcSlopeAtBearing));
+  const slopeValue = carried.hanger ? carried.hanger.slope : bcSlopeAtBearing;
+  const slopeAngle = Math.round(Math.abs(slopeValue)); // API slopeAngle is an int32
   const slopeType  = slopeAngle === 0
     ? SLOPE_TYPE_NONE
-    : (bcSlopeAtBearing < 0 ? SLOPE_TYPE_UP : SLOPE_TYPE_DOWN);
+    : (slopeValue < 0 ? SLOPE_TYPE_UP : SLOPE_TYPE_DOWN);
 
   const carriedMember: SSTCarriedMember = {
     material: carriedMaterial,

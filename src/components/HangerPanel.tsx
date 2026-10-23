@@ -548,7 +548,7 @@ function PayloadPreview({ payload, carriedLabel, girderLabel, group, carried }: 
         {sections.hanger && (
           <div className="py-1.5 pl-1 space-y-0.5">
             <Row label="Skew (Degrees)" value={`${cd.angle.skewRaw}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}°`} sourceType="tre" sourceNote={cd.angle.slopeType === 0 ? "hanger line (block #12) = 0" : `hanger line (block #12): ${cd.angle.slopeType === 1 ? "Up" : "Down"}`} />
             <Row label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
             <Row label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
           </div>

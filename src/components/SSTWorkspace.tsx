@@ -502,7 +502,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ? `LG*T field[14]=${carried.hangerAngle}° → skew=${cd.angle.skewRaw}°`
                 : 'not available in TRE/IFC'}
             />
-            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}\u00B0`} sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}°`} sourceType="tre" sourceNote={cd.angle.slopeType === 0 ? "hanger line (block #12) = 0" : `hanger line (block #12): ${cd.angle.slopeType === 1 ? "Up" : "Down"}`} />
             <Row label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
             <Row label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
           </div>
@@ -603,7 +603,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="text-[8px] uppercase text-zinc-300 font-bold tracking-wider border-b border-[#1E293B]/60 pb-0.5 pt-1">Hanger Options</div>
               <div className="space-y-1">
                 <MappingRow2 label="Skew (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
-                <MappingRow2 label="Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
+                <MappingRow2 label="Slope (Degrees)" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="girder TRE hanger line LG{n}T= · 11th value after the = (block #12)" note="rounded to an integer · positive = Down, negative = Up, 0 = None" />
                 <MappingRow2 label="Top Flange Bend (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
                 <MappingRow2 label="Top Flange Slope (Degrees)" badge="N/A" badgeColor="red" note="Not available in TRE/IFC — defaults to 0°" />
               </div>
