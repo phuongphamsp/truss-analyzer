@@ -1,5 +1,5 @@
 import { GirderGroup, TrussInstance, TreData, CarriedTruss, Point3D, BoundingBox } from '../types';
-import { pickReactions } from './reactions';
+import { pickReactions, separateByChord } from './reactions';
 
 export type LogCallback = (msg: string, type?: 'info'|'success'|'error'|'warning') => void;
 
@@ -654,7 +654,7 @@ function parseDOL(text: string): number | null {
 }
 
 function parseHangers(text: string) {
-   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number; slope: number }> = [];
+   const hangers: Array<{ xFeet: number; xInches: number; label: string; width: number; heelHeight: number; bearingLocation: number; angle: number; bearingSideFlag: number; slope: number; chord: number }> = [];
   const lines = text.split('\n');
   let inHangerSection = false;
   
@@ -675,6 +675,7 @@ function parseHangers(text: string) {
         const angle            = parts.length > 14 ? parseFloat(parts[14]) : 90;
         const bearingSideFlag  = parts.length > 13 ? parseInt(parts[13]) : 0; // 0=left, 1=right
         const slope            = parts.length > 10 ? parseFloat(parts[10]) : 0; // signed slope angle (degrees); > 0 Down, < 0 Up
+        const chord            = parts.length > 8 ? parseInt(parts[8]) : 0;     // block #10: 1 = TC, 2 = BC
         if (!isNaN(xInches)) {
           hangers.push({
             xFeet: xInches / 12,
@@ -686,6 +687,7 @@ function parseHangers(text: string) {
             angle: isNaN(angle) ? 90 : angle,
             bearingSideFlag,
             slope: isNaN(slope) ? 0 : slope,
+            chord: isNaN(chord) ? 0 : chord,
           });
         }
       }
@@ -1006,7 +1008,7 @@ const BEARING_LOCATION_TOLERANCE = 4.1; // inches — covers floating point drif
 function parseReactionAtBearing(
   carriedTreTxt: string,
   targetBearing: number
-): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number | undefined; entries: Array<{ value: number; dolFactor: number }> } | null {
+): { downReaction: number; upliftReaction: number; bearingSide: 'left' | 'right'; downDolFactor: number; upliftDolFactor: number | undefined; entries: Array<{ value: number; dolFactor: number; y: number }> } | null {
   const lines = carriedTreTxt.split('\n');
 
   // Tìm REACTION INFO section
@@ -1020,7 +1022,7 @@ function parseReactionAtBearing(
   i++; // bỏ qua count line
 
   // Track value + dolFactor per collected entry
-  const entries: Array<{ value: number; dolFactor: number }> = [];
+  const entries: Array<{ value: number; dolFactor: number; y: number }> = [];
   let resolvedBearingSide: 'left' | 'right' | null = null;
 
   while (i < lines.length) {
@@ -1077,7 +1079,7 @@ function parseReactionAtBearing(
       const isMatchBearing = Math.abs(bearingLoc - matchedBearing) <= BEARING_LOCATION_TOLERANCE;
 
       if (isTotal && isMatchBearing) {
-        entries.push({ value, dolFactor });
+        entries.push({ value, dolFactor, y: parseFloat(dp[4]) });
       }
 
       i++;
@@ -1153,11 +1155,15 @@ function enrichCarriedTrusses(carriedTrusses: CarriedTruss[], girder: TrussInsta
 
       const result = parseReactionAtBearing(carriedTreTxt, targetBearing);
       if (result) {
-        c.downReaction    = result.downReaction;
-        c.upliftReaction  = result.upliftReaction;
+        // An end can bear on both the top chord and the bottom chord (two bearing heights Y at
+        // the same X). Each hanger only carries its own bearing, so keep that chord's rows
+        // (hanger block #10: 1 = TC = larger Y, 2 = BC = smaller Y).
+        const own = pickReactions(separateByChord(result.entries, hanger.chord)) ?? result;
+        c.downReaction    = own.downReaction;
+        c.upliftReaction  = own.upliftReaction;
         c.bearingSide     = result.bearingSide; // derived from bearingA(left) vs bearingB(right)
-        c.downDolFactor   = result.downDolFactor;
-        c.upliftDolFactor = result.upliftDolFactor;
+        c.downDolFactor   = own.downDolFactor;
+        c.upliftDolFactor = own.upliftDolFactor;
         c.reactionEntries = result.entries;
         return;
       }

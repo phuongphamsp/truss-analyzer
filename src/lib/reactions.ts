@@ -36,6 +36,21 @@ export function pickReactions(entries: ReactionEntry[]): PickedReactions | null 
   };
 }
 
+/**
+ * An end of a truss can bear on both its top chord (TC) and its bottom chord (BC): REACTION INFO
+ * then has rows at the same X but two different heights Y. A hanger carries only one of them:
+ * hanger block #10 = 1 (TC, the larger Y) or 2 (BC, the smaller Y).
+ * With a single Y, or an unknown chord, every row is kept.
+ */
+export function separateByChord(entries: ReactionEntry[], chord: number | undefined): ReactionEntry[] {
+  if (chord !== 1 && chord !== 2) return entries;
+  const round3 = (v: number) => Math.round(v * 1000) / 1000;
+  const ys = [...new Set(entries.map((e) => e.y).filter((y): y is number => y !== undefined && !isNaN(y)).map(round3))];
+  if (ys.length < 2) return entries;
+  const target = chord === 1 ? Math.max(...ys) : Math.min(...ys);
+  return entries.filter((e) => e.y !== undefined && round3(e.y) === target);
+}
+
 const DOL_EPS = 0.0005;
 
 /** Keep only the load cases whose DOL is one of `validDols` (null = keep all). */
@@ -58,7 +73,7 @@ export function applyRegionReactions(groups: GirderGroup[], region: SSTRegion): 
     ...g,
     carriedTrusses: g.carriedTrusses.map((c): CarriedTruss => {
       if (!c.reactionEntries) return c;
-      const picked = pickReactions(filterEntriesByDol(c.reactionEntries, validDols));
+      const picked = pickReactions(filterEntriesByDol(separateByChord(c.reactionEntries, c.hanger?.chord), validDols));
       return picked ? { ...c, ...picked } : c;
     }),
   }));

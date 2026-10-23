@@ -52,6 +52,7 @@ export interface TreData {
     bearingLocation: number;  // bearing location of carried truss at this hanger (inches), from LG*T field[16]
     angle: number;            // carried truss angle relative to girder (degrees), from LG*T field[14]; 90/270 = perpendicular
     slope: number;            // signed slope angle (degrees), LG*T field[10] = block #12 in the tester's numbering; > 0 Down, < 0 Up
+    chord: number;            // LG*T field[8] = block #10: 1 = hanger on the carried truss's top chord (TC), 2 = bottom chord (BC)
   }>;
 }
 
@@ -87,6 +88,7 @@ export interface TrussInstance {
 export interface ReactionEntry {
   value: number;
   dolFactor: number;
+  y?: number; // height of the bearing on the carried truss (REACTION INFO column 5): larger = TC, smaller = BC
 }
 
 export interface CarriedTruss {
