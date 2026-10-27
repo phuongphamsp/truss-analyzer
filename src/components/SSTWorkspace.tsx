@@ -10,7 +10,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { GirderGroup, CarriedTruss } from '../types';
 import type { SSTHangerResult, SSTAPIResponse, SSTPayload } from '../lib/sst-types';
-import { buildSSTPayload, computeAnsitpi, getRegionIssues } from '../lib/sst-mapper';
+import { buildSSTPayload, computeAnsitpi, getRegionIssues, getGirderSpecies, getCarriedSpecies, speciesStringToMaterial } from '../lib/sst-mapper';
 import { useRegion, useRegionConfig } from '../lib/region';
 import {
   hasSSTToken,
@@ -239,16 +239,16 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
   const cd = payload.carriedMembers[0];
   const isTruss = payload.flushOption === 'BOTTOM';
 
-  // Resolve species string for display (from cuttingMembers → bottomChord spec → ifcBottomChord)
-  const girderSpeciesStr =
-    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
-    ?? group.girder.treData?.bottomChord
-    ?? group.girder.ifcBottomChord
-    ?? null;
-  const carriedSpeciesStr =
-    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
-    ?? carried.treData?.bottomChord
-    ?? null;
+  // Species string for display: the LOWEST bottom-chord member (falls back to cutting info → IFC)
+  const girderSpeciesStr = getGirderSpecies(group) ?? null;
+  const carriedSpeciesStr = getCarriedSpecies(carried) ?? null;
+  // Say so when the region sends a different species than the TRE has (e.g. SP sent as DF in CAN)
+  const substitutionNote = (str: string | null, sentMaterial: number) => {
+    const raw = speciesStringToMaterial(str ?? undefined);
+    if (!str || raw === sentMaterial) return '';
+    const short = (m: number) => (SPECIES_LABELS[m] ?? String(m)).split(' — ')[0];
+    return ` · ${short(raw)} is sent as ${short(sentMaterial)} (not offered in ${regionConfig.label}, temporary)`;
+  };
 
   // ANSI/TPI 1 connection type — computed from 5d rule
   const ansitpiComputed = computeAnsitpi(group, carried);
@@ -427,7 +427,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Lumber Species"
               value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
               sourceType={girderSpeciesStr ? 'tre-or-ifc' : 'default'}
-              sourceNote={girderSpeciesStr ? `TRE → IFC fallback: "${girderSpeciesStr}"` : 'default: DF'}
+              sourceNote={girderSpeciesStr ? `lowest bottom chord: "${girderSpeciesStr}"${substitutionNote(girderSpeciesStr, cm.material)}` : 'default: DF'}
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
             <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
@@ -463,7 +463,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               label="Lumber Species"
               value={SPECIES_LABELS[cd.material] ?? String(cd.material)}
               sourceType={carriedSpeciesStr ? 'tre' : 'default'}
-              sourceNote={carriedSpeciesStr ? `from TRE: "${carriedSpeciesStr}"` : 'default: DF'}
+              sourceNote={carriedSpeciesStr ? `lowest bottom chord: "${carriedSpeciesStr}"${substitutionNote(carriedSpeciesStr, cd.material)}` : 'default: DF'}
             />
             <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
@@ -566,7 +566,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → girder label" note="e.g. T07" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
-                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: bottomChord spec string → default DF (5)" />
+                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="MEMBER INFO: LOWEST BottomChord member (smallest Y) → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: cutting info → default DF (5) · CAN: SP is sent as DF (temporary), HF is blocked" />
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Bottom Chord Height" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → depth (inches)" note="e.g. 5.5&quot; for 2x6" />
                 <MappingRow2 label="Number of Plies" badge="Default" badgeColor="gray" note="1 — not available in TRE" />
@@ -579,7 +579,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
               <div className="space-y-1">
                 <MappingRow2 label="Member ID" badge="TRE" badgeColor="green" treSection="[Hanger Loading Info.]" treField="LG{n}T= parts[4] → carried label" note="e.g. T02" />
                 <MappingRow2 label="Type" badge="Default" badgeColor="gray" note="Truss (5)" />
-                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="BottomChord → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: bottomChord spec string → default DF (5)" />
+                <MappingRow2 label="Lumber Species" badge="TRE" badgeColor="green" treSection="[ADDITIONAL CUTTING INFO]" treField="MEMBER INFO: LOWEST BottomChord member (smallest Y) → species token (DF/HF/SP/SPF) → material code 5/6/7/8" note="fallback: cutting info → default DF (5) · CAN: SP is sent as DF (temporary), HF is blocked" />
                 <MappingRow2 label="Bottom Chord Width" badge="TRE" badgeColor="green" treSection="MEMBER INFO" treField="BottomChord member → width (inches)" note="e.g. 1.5&quot; for 2x lumber" />
                 <MappingRow2 label="Heel Height" badge="TRE" badgeColor="green"
                   treSection="[Hanger Loading Info.]"

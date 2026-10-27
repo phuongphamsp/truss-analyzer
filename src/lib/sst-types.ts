@@ -135,6 +135,11 @@ export interface SSTRegionConfig {
    * are ignored when picking the Download / Uplift reaction. null = use every load case.
    */
   validDols: number[] | null;
+  /**
+   * Truss species material codes this region cannot take, mapped to the one that is sent instead
+   * (temporary; CAN has no SP so it is sent as DF until the tester confirms otherwise).
+   */
+  materialSubstitutions: Record<number, number>;
 }
 
 export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
@@ -155,6 +160,7 @@ export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
     defaultUplift: UL_DURATION_WIND_QUAKE,
     defaultDownload: DL_DURATION_ROOF,
     validDols: null,
+    materialSubstitutions: {},
   },
   can: {
     label: 'CAN',
@@ -169,6 +175,7 @@ export const REGION_CONFIG: Record<SSTRegion, SSTRegionConfig> = {
     defaultUplift: UL_DURATION_SHORT_TERM,
     defaultDownload: DL_DURATION_STANDARD_TERM,
     validDols: [0.65, 1.0, 1.15],
+    materialSubstitutions: { [MATERIAL_TRUSS_SP]: MATERIAL_TRUSS_DF },
   },
 };
 

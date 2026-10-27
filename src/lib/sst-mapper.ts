@@ -63,7 +63,7 @@ import {
  * anywhere in the spec string (e.g. "2x4 No.2 SP" → 7).
  * Falls back to MATERIAL_TRUSS (5 = DF) if species is unknown.
  */
-function speciesStringToMaterial(speciesOrSpec: string | undefined): number {
+export function speciesStringToMaterial(speciesOrSpec: string | undefined): number {
   if (!speciesOrSpec) return MATERIAL_TRUSS;
   const s = speciesOrSpec.trim().toUpperCase();
   // Check longest token first to avoid "SP" matching inside "SPF"
@@ -299,21 +299,47 @@ export function computeAnsitpi(
   };
 }
 
+/**
+ * Spec ("2x8 2400F 2.0E SP") of the LOWEST bottom-chord member.
+ *
+ * A bottom chord can be made of stacked members (e.g. a 2x8 SP with a 2x4 SPF above it).
+ * The carried truss hangs on the lowest one, so its species is the one that counts (tester
+ * spec). Lowest = smallest Y; members at the same height prefer the larger cross-section so
+ * zero-height ledger pieces are ignored.
+ */
+function lowestBottomChordSpec(members: TreData['members']): string | undefined {
+  const bcs = (members ?? []).filter((m) => m.type === 'BottomChord' && m.coords && m.coords.length > 0);
+  if (bcs.length === 0) return undefined;
+  const minY = (m: (typeof bcs)[number]) => Math.min(...m.coords.map((c) => c.y));
+  const lowest = Math.min(...bcs.map(minY));
+  const atBottom = bcs.filter((m) => minY(m) - lowest < 0.01);
+  const pick = atBottom.reduce((a, b) => (b.width * b.depth > a.width * a.depth ? b : a));
+  return `${pick.size} ${pick.grade} ${pick.species}`;
+}
+
 /** Bottom-chord species string of the girder (carrying member) */
-function getGirderSpecies(group: GirderGroup): string | undefined {
+export function getGirderSpecies(group: GirderGroup): string | undefined {
   return (
-    group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    lowestBottomChordSpec(group.girder.treData?.members)
+    ?? group.girder.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
     ?? group.girder.treData?.bottomChord
     ?? group.girder.ifcBottomChord
   );
 }
 
 /** Bottom-chord species string of the carried truss */
-function getCarriedSpecies(carried: CarriedTruss): string | undefined {
+export function getCarriedSpecies(carried: CarriedTruss): string | undefined {
   return (
-    carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
+    lowestBottomChordSpec(carried.treData?.members)
+    ?? carried.treData?.cuttingMembers?.find(m => m.type === 'BottomChord')?.species
     ?? carried.treData?.bottomChord
   );
+}
+
+/** SST material code to send for a species string in a region (applies the region's substitutions). */
+export function resolveMaterial(species: string | undefined, region: SSTRegion): number {
+  const raw = speciesStringToMaterial(species);
+  return REGION_CONFIG[region].materialSubstitutions[raw] ?? raw;
 }
 
 const MATERIAL_SPECIES_NAME: Record<number, string> = {
@@ -336,7 +362,7 @@ export function getRegionIssues(
   const supported = REGION_CONFIG[region].supportedTrussMaterials;
   const issues: string[] = [];
   const check = (who: string, species: string | undefined) => {
-    const material = speciesStringToMaterial(species);
+    const material = resolveMaterial(species, region);
     if (!supported.includes(material)) {
       const name = MATERIAL_SPECIES_NAME[material] ?? String(material);
       const allowed = supported.map((m) => MATERIAL_SPECIES_NAME[m] ?? m).join(', ');
@@ -411,7 +437,7 @@ export function buildSSTPayload(
   // Species → material code for girder (carrying member).
   // Use the bottom chord species from cuttingMembers (authoritative) or
   // fall back to the majority bottomChord spec string (e.g. "2x6 No.2 SP").
-  const girderMaterial = speciesStringToMaterial(getGirderSpecies(group));
+  const girderMaterial = resolveMaterial(getGirderSpecies(group), region);
 
   const carryingMember: SSTCarryingMember = {
     material: girderMaterial,
@@ -439,7 +465,7 @@ export function buildSSTPayload(
   // Species → material code for carried truss.
   // Use the bottom chord species from cuttingMembers (authoritative) or
   // fall back to the majority bottomChord spec string (e.g. "2x4 No.2 SP").
-  const carriedMaterial = speciesStringToMaterial(getCarriedSpecies(carried));
+  const carriedMaterial = resolveMaterial(getCarriedSpecies(carried), region);
 
   // Skew angle — derived from LG*T field[14] (angle of carried truss relative to girder).
   // If hangerAngle in [0, 180]  → skewAngle = hangerAngle - 90   (range: -90 to +90)
