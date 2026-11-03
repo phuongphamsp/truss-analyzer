@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 import { analyzeFiles } from '../src/lib/parser';
-import { extractPdfPages, parsePdfJob, readLayoutPage, linkLayout, suggestConnections } from '../src/lib/pdf';
+import { extractPdfPages, parsePdfJob, pdfToGirderGroups, readLayoutPage, linkLayout, suggestConnections } from '../src/lib/pdf';
+import { buildSSTPayload } from '../src/lib/sst-mapper';
 import type { PdfJob, PdfTruss } from '../src/lib/pdf';
 import { getCarriedSpecies, getGirderSpecies } from '../src/lib/sst-mapper';
 
@@ -174,6 +175,39 @@ async function main() {
         check(!!hit && hit.carried === c.instance.label.toUpperCase(), `layout: ${g.girder.label}@${c.localX} carries ${c.instance.label}`, hit ? `layout says ${hit.carried}` : 'not found in the layout');
       }
     }
+
+    // 8) the payload sent to Strong-Tie: built from the PDFs vs built from the TRE
+    const pdfGroups = pdfToGirderGroups(job, links);
+    const flat = (o: unknown, prefix = '', out: Record<string, unknown> = {}): Record<string, unknown> => {
+      if (o && typeof o === 'object') for (const [k, v] of Object.entries(o as object)) flat(v, prefix ? `${prefix}.${k}` : k, out);
+      else out[prefix] = o;
+      return out;
+    };
+    const same = (a: unknown, b: unknown) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 0.01 : a === b);
+    const region = process.env.REGION === 'us' ? 'us' : 'can';
+    const stats = new Map<string, { ok: number; total: number; samples: string[] }>();
+    let compared = 0;
+    for (const g of groups) {
+      const pg = pdfGroups.find((x) => x.girder.label.toUpperCase() === g.girder.label.toUpperCase());
+      for (const c of g.carriedTrusses) {
+        const pc = pg?.carriedTrusses.find((x) => Math.abs(x.localX - c.localX) <= 0.5);
+        if (!pg || !pc) continue;
+        compared++;
+        const a = flat(buildSSTPayload(g, c, region));
+        const b = flat(buildSSTPayload(pg, pc, region));
+        for (const key of Object.keys(a)) {
+          const s = stats.get(key) ?? { ok: 0, total: 0, samples: [] };
+          s.total++;
+          if (same(a[key], b[key])) s.ok++;
+          else if (s.samples.length < 2) s.samples.push(`${g.girder.label}@${c.localX}: TRE ${String(a[key])} | PDF ${String(b[key])}`);
+          stats.set(key, s);
+        }
+      }
+    }
+    console.log(`\nPayload built from the PDFs vs from the TRE (${region.toUpperCase()}), ${compared} connections:`);
+    const wrong = [...stats].filter(([, s]) => s.ok < s.total);
+    console.log(`  ${stats.size - wrong.length} of ${stats.size} payload fields identical on every connection`);
+    for (const [key, s] of wrong) console.log(`  DIFFERENT ${key}: ${s.ok}/${s.total} equal   e.g. ${s.samples.join('  ||  ')}`);
   }
 
   console.log(`\nResult: ${pass} checks matched, ${fail} mismatched`);
