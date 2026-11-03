@@ -26,6 +26,8 @@ export default function App() {
   ]);
   const [girders, setGirders] = useState<GirderGroup[]>([]);
   const [selectedGirderId, setSelectedGirderId] = useState<string | null>(null);
+  // Connections built from the PDFs (replace the TRE ones in the Job Summary while set)
+  const [pdfGirders, setPdfGirders] = useState<GirderGroup[] | null>(null);
   const [activeTab, setActiveTab] = useState<'analyzer' | 'summary' | 'pdf'>('analyzer');
 
   // Shared inventory state (lifted from SSTWorkspace so JobSummaryTable can use it)
@@ -55,6 +57,7 @@ export default function App() {
 
   const handleAnalyze = useCallback((extractedGirders: GirderGroup[]) => {
       setGirders(extractedGirders);
+      setPdfGirders(null);
       setHangerResultsMap({});  // reset hanger results when new project is loaded
       if (extractedGirders.length > 0) {
           setSelectedGirderId(extractedGirders[0].girder.id);
@@ -82,6 +85,7 @@ export default function App() {
 
         if (isMounted) {
           setGirders(extractedGirders);
+          setPdfGirders(null);
           if (extractedGirders.length > 0) {
               setSelectedGirderId(extractedGirders[0].girder.id);
           }
@@ -98,6 +102,7 @@ export default function App() {
 
   // Reactions depend on the region (CAN ignores load cases with a DOL outside 0.65 / 1.00 / 1.15)
   const regionGirders = useMemo(() => applyRegionReactions(girders, region), [girders, region]);
+  const summaryGirders = useMemo(() => (pdfGirders ? applyRegionReactions(pdfGirders, region) : regionGirders), [pdfGirders, region, regionGirders]);
   const selectedGirder = regionGirders.find(g => g.girder.id === selectedGirderId) || null;
 
   // Count resolved connections for the tab badge
@@ -204,11 +209,19 @@ export default function App() {
                         />
                     </div>
                 )}
-                {activeTab === 'pdf' && <PdfInspector />}
+                {activeTab === 'pdf' && (
+                    <PdfInspector
+                        onUseJob={(groups) => {
+                            setPdfGirders(groups);
+                            setHangerResultsMap({});
+                            setActiveTab('summary');
+                        }}
+                    />
+                )}
                 {activeTab === 'summary' && (
                     <div className="flex-1 flex overflow-hidden">
                         <JobSummaryTable
-                            girders={regionGirders}
+                            girders={summaryGirders}
                             hangerResultsMap={hangerResultsMap}
                             inventory={inventory}
                             onInventoryChange={setInventory}

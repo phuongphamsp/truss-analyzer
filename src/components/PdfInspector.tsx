@@ -7,8 +7,9 @@
  */
 
 import { useMemo, useState } from 'react';
+import type { GirderGroup } from '../types';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { attachGeometry, extractPdfPages, linkLayout, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
+import { attachGeometry, extractPdfPages, linkLayout, pdfToGirderGroups, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
 import type { LayoutPage, PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
 
 async function readPdf(file: File): Promise<PdfJob> {
@@ -50,7 +51,7 @@ function feetInches(totalInches: number): string {
 }
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
-export function PdfInspector() {
+export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[]) => void }) {
   const [job, setJob] = useState<PdfJob | null>(null);
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -90,6 +91,7 @@ export function PdfInspector() {
 
   const suggestions = job ? suggestConnections(job) : [];
   const links = useMemo(() => (job && layoutPage ? linkLayout(layoutPage, job) : null), [job, layoutPage]);
+  const pdfGroups = useMemo(() => (job && links ? pdfToGirderGroups(job, links) : []), [job, links]);
   // a sheet can be printed more than once (same label): list each girder once
   const girders = job
     ? job.trusses.filter((t, i, all) => t.hangerLoads.length > 0 && all.findIndex((o) => o.label === t.label && o.hangerLoads.length > 0) === i)
@@ -159,6 +161,23 @@ export function PdfInspector() {
             <div className="text-[11px] font-mono" data-testid="layout-summary">
               layout {layoutName} · scale {links.scale ?? '–'} in/pt · {links.connections.length} connections found
               {links.notes.map((n, i) => <div key={i} className="text-amber-800">note: {n}</div>)}
+            </div>
+          )}
+
+          {onUseJob && (
+            <div className="flex items-center gap-3 text-[11px]">
+              <button
+                className="px-3 py-1.5 bg-[#141414] text-white text-[10px] font-bold uppercase tracking-wider rounded disabled:opacity-40"
+                disabled={pdfGroups.length === 0}
+                onClick={() => onUseJob(pdfGroups)}
+                data-testid="use-pdf-job"
+                title={links ? 'Open the Job Summary built from these PDFs and query the Hanger Selector' : 'Add the layout PDF first'}
+              >
+                Query Hanger Selector
+              </button>
+              <span className="opacity-70" data-testid="pdf-connections">
+                {links ? `${pdfGroups.reduce((n, g) => n + g.carriedTrusses.length, 0)} connections ready` : 'add the layout PDF to build the connections'}
+              </span>
             </div>
           )}
 
