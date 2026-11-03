@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 import { analyzeFiles } from '../src/lib/parser';
-import { extractPdfPages, parsePdfJob, pdfToGirderGroups, readLayoutPage, linkLayout, suggestConnections } from '../src/lib/pdf';
+import { attachGeometry, extractPdfPages, parsePdfJob, pdfToGirderGroups, readLayoutPage, linkLayout, suggestConnections } from '../src/lib/pdf';
 import { buildSSTPayload } from '../src/lib/sst-mapper';
 import type { PdfJob, PdfTruss } from '../src/lib/pdf';
 import { getCarriedSpecies, getGirderSpecies } from '../src/lib/sst-mapper';
@@ -55,6 +55,7 @@ async function main() {
     verbosity: 0,
   }).promise;
   const job: PdfJob = parsePdfJob(await extractPdfPages(doc));
+  await attachGeometry(job, (n) => doc.getPage(n), (pdfjs as any).OPS);
 
   console.log(`PDF: ${job.format}, job ${job.jobName}, ${job.trusses.length} truss sheets`);
   console.log(`TRE: ${treFiles.length} files, ${groups.length} girders\n`);
@@ -183,7 +184,8 @@ async function main() {
       else out[prefix] = o;
       return out;
     };
-    const same = (a: unknown, b: unknown) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 0.01 : a === b);
+    // geometry read from a drawing is as exact as the printed scale: a tenth of an inch
+    const same = (a: unknown, b: unknown) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) < 0.15 : a === b);
     const region = process.env.REGION === 'us' ? 'us' : 'can';
     const stats = new Map<string, { ok: number; total: number; samples: string[] }>();
     let compared = 0;

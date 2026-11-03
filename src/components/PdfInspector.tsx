@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { extractPdfPages, linkLayout, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
+import { attachGeometry, extractPdfPages, linkLayout, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
 import type { LayoutPage, PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
 
 async function readPdf(file: File): Promise<PdfJob> {
@@ -17,7 +17,9 @@ async function readPdf(file: File): Promise<PdfJob> {
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjs.getDocument({ data }).promise;
-  return parsePdfJob(await extractPdfPages(doc as unknown as PdfDocumentLike));
+  const job = parsePdfJob(await extractPdfPages(doc as unknown as PdfDocumentLike));
+  await attachGeometry(job, (n) => doc.getPage(n) as any, pdfjs.OPS as unknown as Record<string, number>);
+  return job;
 }
 
 /** What to show for the truss suggested at a hanger load. */

@@ -26,9 +26,10 @@ export function isMitek8810(pages: PdfPageText[]): boolean {
   return /Job\s+Truss\s+Truss Type/.test(first) && /MiTek Industries/.test(first);
 }
 
-function emptyTruss(label: string, type: string): PdfTruss {
+function emptyTruss(label: string, type: string, page: number): PdfTruss {
   return {
     label,
+    page,
     type,
     qty: null,
     ply: null,
@@ -165,7 +166,7 @@ export function parseMitek8810(pages: PdfPageText[]): PdfJob {
       current.lines.push(...lines);
       continue;
     }
-    const truss = emptyTruss(header.label, header.type);
+    const truss = emptyTruss(header.label, header.type, page.page);
     truss.qty = header.qty;
     truss.ply = header.ply;
     current = { truss, lines: [...lines] };

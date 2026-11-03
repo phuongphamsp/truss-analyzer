@@ -40,8 +40,32 @@ export interface PdfHangerLoad {
   joint: string | null;
 }
 
+/** A vertical web read from the drawing: two faces one lumber depth apart, standing on the bottom chord. */
+export interface VerticalWeb {
+  /** left / right face, inches from the left bearing */
+  left: number;
+  right: number;
+  /** face-to-face distance snapped to the lumber depth (3.5, 5.5 ...) */
+  depth: number;
+  /** top edge of each face, inches above the underside of the bottom chord */
+  topLeft: number;
+  topRight: number;
+}
+
+/** What the drawing of one truss gives (see drawing.ts). */
+export interface TrussGeometry {
+  inchesPerPoint: number;
+  /** heel height (inches) of the hung end at a joint */
+  heelByJoint: Record<string, number>;
+  webs: VerticalWeb[];
+}
+
 export interface PdfTruss {
   label: string;
+  /** page of the sheet whose drawing belongs to this truss */
+  page: number | null;
+  /** read from the drawing page, when it has been (attachGeometry) */
+  geometry?: TrussGeometry;
   type: string;
   qty: number | null;
   ply: number | null;

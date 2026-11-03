@@ -26,7 +26,7 @@ const BEARING_ROW =
   /(?:^|\s)([A-Z]{1,2}(?:\([A-Z]\))?)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(MECHANICAL|[\d-]+)(?:\s+[\d-]+)?/;
 const CONCENTRATED_ROW = /(?:^|\s)([A-Z]{1,2})\s+(\d+-\d+-\d+)\s+(-?\d+)\s+(-?\d+)/;
 
-function parsePage(lines: string[]): PdfTruss | null {
+function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
   const h = lines.findIndex((l) => /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(l));
   if (h < 0) return null;
   const row = lines.slice(h + 1, h + 4).map((l) => l.match(/^(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\b/)).find(Boolean);
@@ -34,6 +34,7 @@ function parsePage(lines: string[]): PdfTruss | null {
 
   const t: PdfTruss = {
     label: row[2],
+    page: pageNumber,
     type: '',
     qty: Number(row[3]),
     ply: Number(row[4]),
@@ -86,7 +87,7 @@ export function parseMitek8420(pages: PdfPageText[]): PdfJob {
   const trusses: PdfTruss[] = [];
   let jobName = '';
   for (const page of pages) {
-    const t = parsePage(page.lines.map((l) => l.text));
+    const t = parsePage(page.lines.map((l) => l.text), page.page);
     if (!t) continue;
     const header = page.lines.map((l) => l.text).find((l) => /^\S+\s+\S+\s+\d+\s+\d+\b/.test(l));
     jobName = jobName || (header ? header.split(/\s+/)[0] : '');

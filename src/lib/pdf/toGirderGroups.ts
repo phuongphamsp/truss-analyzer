@@ -4,8 +4,9 @@
  * The engineering PDF gives the girders, hanger loads, lumber, plies and reactions; the layout gives
  * which truss hangs at each hanger. Anything the PDFs do not give is left empty or at the default the
  * payload builder already uses, so the result can be compared field by field with the TRE route:
- *   - heel height, slope, skew: not read yet (heel falls back to 3.5", slope 0, skew square)
- *   - king post: no web geometry yet, so none
+ *   - heel height: the end vertical at the hung joint of the carried truss's drawing (3.5" when not read)
+ *   - king post: vertical webs of the girder's drawing, judged by the same rule as the TRE route
+ *   - slope, skew: not read yet (slope 0, skew square)
  *   - DOL: not in the PDF, so the region defaults apply
  */
 
@@ -24,6 +25,9 @@ const ACTUAL: Record<string, [number, number]> = {
   '2x12': [1.5, 11.25],
 };
 
+/** inches: faces read from a drawing are good to about a tenth of an inch */
+const FACE_SLACK = 0.1;
+
 const specString = (s: PdfLumberSpec | null) => (s ? `${s.size} ${s.grade} ${s.species}` : '');
 
 /** TRE-shaped data for a truss, reduced to what the payload builder reads. */
@@ -31,6 +35,18 @@ function treDataFor(t: PdfTruss, hangers: NonNullable<TreData['hangers']>): TreD
   const [width, depth] = ACTUAL[t.botChord?.size ?? '2x4'] ?? [1.5, 3.5];
   const members: NonNullable<TreData['members']> = t.botChord
     ? [
+        ...(t.geometry?.webs ?? []).map((w, i) => ({
+          name: `W${i + 1}`,
+          type: 'Web' as const,
+          size: '',
+          grade: '',
+          species: '',
+          width: 1.5,
+          depth: w.depth,
+          // faces widened by the drawing's resolution so a truss that exactly fills the web still fits
+          coords: [{ x: w.left - FACE_SLACK, y: 0 }, { x: w.left - FACE_SLACK, y: w.topLeft }, { x: w.right + FACE_SLACK, y: w.topRight }, { x: w.right + FACE_SLACK, y: 0 }],
+          isStructural: true,
+        })),
         {
           name: 'B1',
           type: 'BottomChord',
@@ -77,6 +93,13 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
     if (g.hangerLoads.length === 0) continue;
     const gLabel = g.label.toUpperCase();
 
+    // heel of the hung end of the carried truss, read from its drawing (0 = not read)
+    const heelOf = (carried: string, load: number) => {
+      const ct = byLabel.get(carried);
+      const support = ct ? hungSupport(ct, load) : null;
+      return (support && ct?.geometry?.heelByJoint[support.joint]) || 0;
+    };
+
     // one hanger line per hanger load; the carried truss comes from the layout
     const rows = g.hangerLoads
       .map((h) => ({ h, link: links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - h.position) <= 0.5) }))
@@ -89,7 +112,7 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
       xInches: h.position,
       label: link!.carried,
       width: 1.5,
-      heelHeight: 0, // not read yet
+      heelHeight: heelOf(link!.carried, h.load),
       bearingLocation: 0,
       angle: 90, // square: skew not read yet
       slope: 0, // not read yet
