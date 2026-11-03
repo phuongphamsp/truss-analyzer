@@ -69,6 +69,10 @@ function treDataFor(t: PdfTruss, hangers: NonNullable<TreData['hangers']>): TreD
     maxReaction: Math.max(0, ...t.supports.map((s) => s.down ?? 0)),
     members,
     ply: t.ply ?? 1,
+    // positions on the drawing run from the left bearing, so the stubs are 0 and the span is bearing to bearing
+    span: t.geometry?.span,
+    leftStub: 0,
+    rightStub: 0,
     hangers,
   };
 }

@@ -57,6 +57,8 @@ export interface TrussGeometry {
   inchesPerPoint: number;
   /** heel height (inches) of the hung end at a joint */
   heelByJoint: Record<string, number>;
+  /** distance between the two outer bearings (inches), when both could be placed */
+  span?: number;
   webs: VerticalWeb[];
 }
 

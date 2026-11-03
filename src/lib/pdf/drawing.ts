@@ -160,13 +160,30 @@ function bottomChord(page: DrawingPage, scale: number): { baseY: number; depthPt
 }
 
 /** The measured length, or the vertical dimension printed for it when one is within a few tenths of an inch. */
-function snapToDimension(page: DrawingPage, measured: number): number {
+function snapToDimension(page: DrawingPage, measured: number, vertical = true): number {
   const printed = page.words
-    .filter((w) => w.rot)
+    .filter((w) => w.rot === vertical)
     .map((w) => fisToInches(w.str))
     .filter((v): v is number => v !== null && Math.abs(v - measured) <= 0.3)
     .sort((a, b) => Math.abs(a - measured) - Math.abs(b - measured));
   return printed[0] ?? Math.round(measured * 16) / 16;
+}
+
+/** Bearing to bearing: the outer wall / girder bearings sit on dimension ticks, the right one is measured from the origin tick. */
+function bearingSpan(page: DrawingPage, truss: PdfTruss, scale: number, origin: number, baseY: number): number | undefined {
+  const ticks = page.segments
+    .filter((s) => Math.abs(s.x1 - s.x2) < OPEN && segmentLength(s) > 3 && segmentLength(s) < 12 && s.x1 > origin + 20)
+    .map((s) => s.x1);
+  const xs: number[] = [];
+  for (const s of truss.supports.filter((x) => !isHungEnd(x))) {
+    const w = page.words.find((x) => !x.rot && x.str === s.joint && Math.abs(x.y - baseY) < 40);
+    if (w) xs.push(w.x + w.w / 2);
+  }
+  if (xs.length < 2) return undefined;
+  const right = Math.max(...xs);
+  const tick = ticks.reduce<number | null>((best, t) => (Math.abs(t - right) < Math.abs((best ?? Infinity) - right) ? t : best), null);
+  if (tick === null || Math.abs(tick - right) > 8) return undefined;
+  return snapToDimension(page, (tick - origin) * scale, false);
 }
 
 export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeometry | null {
@@ -215,7 +232,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
       }
     }
   }
-  return { inchesPerPoint: scale, heelByJoint, webs };
+  return { inchesPerPoint: scale, heelByJoint, webs, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
 }
 
 /** Reads the drawing of every truss sheet of a job into `truss.geometry`. */
