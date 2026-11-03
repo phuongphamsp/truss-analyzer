@@ -6,10 +6,10 @@
  * and chord. Everything runs in the browser; the PDF is not uploaded anywhere.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { extractPdfPages, parsePdfJob, suggestConnections } from '../lib/pdf';
-import type { PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
+import { extractPdfPages, linkLayout, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
+import type { LayoutPage, PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
 
 async function readPdf(file: File): Promise<PdfJob> {
   // loaded on demand: pdf.js is large and only this screen needs it
@@ -25,6 +25,14 @@ function suggestionText(s: SuggestedConnection | undefined): string {
   if (!s || s.confidence === 'none') return '–';
   if (s.confidence === 'unique') return `${s.best!.label} (${s.best!.down} lb)`;
   return `? ${s.candidates.map((c) => c.label).join(' / ')}`;
+}
+
+async function readLayout(file: File): Promise<LayoutPage> {
+  const pdfjs = await import('pdfjs-dist');
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const page = await doc.getPage(1);
+  return readLayoutPage(page as any, pdfjs.OPS as unknown as Record<string, number>);
 }
 
 const spec = (s: PdfLumberSpec | null) => (s ? `${s.size} ${s.species} ${s.grade}` : '–');
@@ -45,6 +53,8 @@ export function PdfInspector() {
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [layoutPage, setLayoutPage] = useState<LayoutPage | null>(null);
+  const [layoutName, setLayoutName] = useState('');
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
@@ -61,7 +71,23 @@ export function PdfInspector() {
     }
   };
 
+  const onLayoutFile = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    setLayoutName(file.name);
+    try {
+      setLayoutPage(await readLayout(file));
+    } catch (e) {
+      setLayoutPage(null);
+      setError(e instanceof Error ? e.message : 'Could not read the layout PDF');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const suggestions = job ? suggestConnections(job) : [];
+  const links = useMemo(() => (job && layoutPage ? linkLayout(layoutPage, job) : null), [job, layoutPage]);
   // a sheet can be printed more than once (same label): list each girder once
   const girders = job
     ? job.trusses.filter((t, i, all) => t.hangerLoads.length > 0 && all.findIndex((o) => o.label === t.label && o.hangerLoads.length > 0) === i)
@@ -81,6 +107,22 @@ export function PdfInspector() {
             data-testid="pdf-file-input"
             onChange={(e) => {
               void onFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+        </label>
+        <label
+          className={`cursor-pointer px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded border border-[#141414] ${job ? 'hover:bg-[#141414]/10' : 'opacity-40 pointer-events-none'}`}
+          title={job ? 'Add the roof truss layout PDF of the same job' : 'Choose the engineering PDF first'}
+        >
+          Add layout PDF
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            data-testid="layout-file-input"
+            onChange={(e) => {
+              void onLayoutFile(e.target.files?.[0]);
               e.target.value = '';
             }}
           />
@@ -111,6 +153,12 @@ export function PdfInspector() {
             <b>{girders.length}</b> girder{girders.length === 1 ? '' : 's'}
             {girders.length > 0 && <> ({girders.map((g) => g.label).join(', ')})</>}
           </div>
+          {layoutName && links && (
+            <div className="text-[11px] font-mono" data-testid="layout-summary">
+              layout {layoutName} · scale {links.scale ?? '–'} in/pt · {links.connections.length} connections found
+              {links.notes.map((n, i) => <div key={i} className="text-amber-800">note: {n}</div>)}
+            </div>
+          )}
 
           <section>
             <h3 className="text-[10px] uppercase font-bold tracking-widest mb-2">Girders and hanger loads</h3>
@@ -129,6 +177,7 @@ export function PdfInspector() {
                       <th className="px-3 py-1">Chord</th>
                       <th className="px-3 py-1">Joint</th>
                       <th className="px-3 py-1">Carried truss (suggested from load)</th>
+                      {links && <th className="px-3 py-1">Carried truss and hanger (from layout)</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -143,6 +192,14 @@ export function PdfInspector() {
                         <td className="px-3 py-1">{h.chord ?? '–'}</td>
                         <td className="px-3 py-1">{h.joint ?? '–'}</td>
                         <td className="px-3 py-1" data-testid="suggestion">{suggestionText(sug)}</td>
+                        {links && (
+                          <td className="px-3 py-1" data-testid="layout-link">
+                            {(() => {
+                              const hit = links.connections.find((c) => c.girder === g.label.toUpperCase() && Math.abs(c.position - h.position) <= 0.5);
+                              return hit ? `${hit.carried}${hit.connector ? ' · ' + hit.connector : ''}` : '–';
+                            })()}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

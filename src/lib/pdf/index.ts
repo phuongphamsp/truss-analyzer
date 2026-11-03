@@ -15,6 +15,10 @@ export type { PdfDocumentLike, PdfPageText } from './pdfText';
 export type * from './types';
 export { suggestConnections, isHungEnd, MATCH_TOLERANCE } from './connections';
 export type { SuggestedConnection, CarriedCandidate, MatchConfidence } from './connections';
+export { readLayoutPage, linkLayout, inferScale, buildBars } from './layout';
+export type { LayoutPage, LayoutLinks, LayoutConnection, Bar } from './layout';
+export { extractSegments } from './pdfVectors';
+export type { Segment } from './pdfVectors';
 
 export function parsePdfJob(pages: PdfPageText[]): PdfJob {
   if (isMitek8810(pages)) return parseMitek8810(pages);

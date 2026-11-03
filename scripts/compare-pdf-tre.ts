@@ -14,11 +14,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 import { analyzeFiles } from '../src/lib/parser';
-import { extractPdfPages, parsePdfJob, suggestConnections } from '../src/lib/pdf';
+import { extractPdfPages, parsePdfJob, readLayoutPage, linkLayout, suggestConnections } from '../src/lib/pdf';
 import type { PdfJob, PdfTruss } from '../src/lib/pdf';
 import { getCarriedSpecies, getGirderSpecies } from '../src/lib/sst-mapper';
 
-const [treDir, pdfFile] = process.argv.slice(2);
+const [treDir, pdfFile, layoutFile] = process.argv.slice(2);
 if (!treDir || !pdfFile) {
   console.error('usage: compare-pdf-tre <tre folder> <engineering pdf>');
   process.exit(1);
@@ -159,6 +159,22 @@ async function main() {
   console.log(`  ambiguous, true truss among candidates: ${ambiguousWith}, ambiguous without it: ${ambiguousWithout}`);
   console.log(`  no candidate: ${none}`);
   [...new Set(notes)].slice(0, 12).forEach((n) => console.log('   ' + n));
+
+  // 7) the layout: who hangs where
+  if (layoutFile) {
+    const ldoc = await (pdfjs as any).getDocument({ data: new Uint8Array(fs.readFileSync(layoutFile)), useSystemFonts: true, verbosity: 0 }).promise;
+    const layoutPage = await readLayoutPage(await ldoc.getPage(1), (pdfjs as any).OPS);
+    const links = linkLayout(layoutPage, job);
+    console.log(`\nLayout: scale ${links.scale} in/pt, ${links.connections.length} connections found`);
+    links.connections.forEach((c) => console.log(`  ${c.girder} @${c.position}" <- ${c.carried}  connector ${c.connector ?? '-'}`));
+    links.notes.forEach((n) => console.log('  note: ' + n));
+    for (const g of groups) {
+      for (const c of g.carriedTrusses) {
+        const hit = links.connections.find((x) => x.girder === g.girder.label.toUpperCase() && Math.abs(x.position - c.localX) <= 0.5);
+        check(!!hit && hit.carried === c.instance.label.toUpperCase(), `layout: ${g.girder.label}@${c.localX} carries ${c.instance.label}`, hit ? `layout says ${hit.carried}` : 'not found in the layout');
+      }
+    }
+  }
 
   console.log(`\nResult: ${pass} checks matched, ${fail} mismatched`);
 }
