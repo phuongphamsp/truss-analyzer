@@ -8,8 +8,8 @@
 
 import { useState } from 'react';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
-import { extractPdfPages, parsePdfJob } from '../lib/pdf';
-import type { PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss } from '../lib/pdf';
+import { extractPdfPages, parsePdfJob, suggestConnections } from '../lib/pdf';
+import type { PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
 
 async function readPdf(file: File): Promise<PdfJob> {
   // loaded on demand: pdf.js is large and only this screen needs it
@@ -18,6 +18,13 @@ async function readPdf(file: File): Promise<PdfJob> {
   const data = new Uint8Array(await file.arrayBuffer());
   const doc = await pdfjs.getDocument({ data }).promise;
   return parsePdfJob(await extractPdfPages(doc as unknown as PdfDocumentLike));
+}
+
+/** What to show for the truss suggested at a hanger load. */
+function suggestionText(s: SuggestedConnection | undefined): string {
+  if (!s || s.confidence === 'none') return '–';
+  if (s.confidence === 'unique') return `${s.best!.label} (${s.best!.down} lb)`;
+  return `? ${s.candidates.map((c) => c.label).join(' / ')}`;
 }
 
 const spec = (s: PdfLumberSpec | null) => (s ? `${s.size} ${s.species} ${s.grade}` : '–');
@@ -54,6 +61,7 @@ export function PdfInspector() {
     }
   };
 
+  const suggestions = job ? suggestConnections(job) : [];
   // a sheet can be printed more than once (same label): list each girder once
   const girders = job
     ? job.trusses.filter((t, i, all) => t.hangerLoads.length > 0 && all.findIndex((o) => o.label === t.label && o.hangerLoads.length > 0) === i)
@@ -120,16 +128,21 @@ export function PdfInspector() {
                       <th className="px-3 py-1">Load (lb)</th>
                       <th className="px-3 py-1">Chord</th>
                       <th className="px-3 py-1">Joint</th>
+                      <th className="px-3 py-1">Carried truss (suggested from load)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...g.hangerLoads].sort((a, b) => a.position - b.position).map((h, i) => (
+                    {(() => {
+                      const mine = suggestions.filter((x) => x.girder === g.label);
+                      return g.hangerLoads.map((h, idx) => ({ h, sug: mine[idx] })).sort((a, b) => a.h.position - b.h.position);
+                    })().map(({ h, sug }, i) => (
                       <tr key={i} className="border-t border-[#141414]/10">
                         <td className="px-3 py-1">{feetInches(h.position)}</td>
                         <td className="px-3 py-1">{h.position}</td>
                         <td className="px-3 py-1">{h.load.toLocaleString()}</td>
                         <td className="px-3 py-1">{h.chord ?? '–'}</td>
                         <td className="px-3 py-1">{h.joint ?? '–'}</td>
+                        <td className="px-3 py-1" data-testid="suggestion">{suggestionText(sug)}</td>
                       </tr>
                     ))}
                   </tbody>

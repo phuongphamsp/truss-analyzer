@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pdfjs from 'pdfjs-dist/legacy/build/pdf.js';
 import { analyzeFiles } from '../src/lib/parser';
-import { extractPdfPages, parsePdfJob } from '../src/lib/pdf';
+import { extractPdfPages, parsePdfJob, suggestConnections } from '../src/lib/pdf';
 import type { PdfJob, PdfTruss } from '../src/lib/pdf';
 import { getCarriedSpecies, getGirderSpecies } from '../src/lib/sst-mapper';
 
@@ -125,6 +125,40 @@ async function main() {
       }
     }
   }
+
+  // 6) which truss hangs at each hanger load: suggestion from load matching vs the TRE truth
+  const suggestions = suggestConnections(job);
+  let uniqueRight = 0, uniqueWrong = 0, ambiguousWith = 0, ambiguousWithout = 0, none = 0, total = 0;
+  const notes: string[] = [];
+  for (const g of groups) {
+    const gl = g.girder.label.toUpperCase();
+    for (const c of g.carriedTrusses) {
+      total++;
+      // several hangers can share a position (TC and BC): take the one whose load is closest to this connection
+      const spot = suggestions
+        .filter((x) => x.girder.toUpperCase() === gl && r2(x.position) === r2(c.localX))
+        .sort((a, b) => Math.abs(a.load - (c.downReaction ?? 0)) - Math.abs(b.load - (c.downReaction ?? 0)))[0];
+      const truth = c.instance.label.toUpperCase();
+      if (!spot || spot.confidence === 'none') {
+        none++;
+        notes.push(`none:      ${gl}@${c.localX} true ${truth}, PDF load ${spot?.load ?? '-'}, TRE down ${Math.round(c.downReaction ?? 0)}`);
+      } else if (spot.confidence === 'unique') {
+        if (spot.best!.label.toUpperCase() === truth) uniqueRight++;
+        else {
+          uniqueWrong++;
+          notes.push(`wrong:     ${gl}@${c.localX} true ${truth}, suggested ${spot.best!.label}`);
+        }
+      } else if (spot.candidates.some((x) => x.label.toUpperCase() === truth)) {
+        ambiguousWith++;
+        notes.push(`ambiguous: ${gl}@${c.localX} true ${truth}, candidates ${spot.candidates.map((x) => x.label).join('/')}`);
+      } else ambiguousWithout++;
+    }
+  }
+  console.log(`\nCarried truss suggestion from load matching (${total} connections):`);
+  console.log(`  unique and right: ${uniqueRight}, unique but wrong: ${uniqueWrong}`);
+  console.log(`  ambiguous, true truss among candidates: ${ambiguousWith}, ambiguous without it: ${ambiguousWithout}`);
+  console.log(`  no candidate: ${none}`);
+  [...new Set(notes)].slice(0, 12).forEach((n) => console.log('   ' + n));
 
   console.log(`\nResult: ${pass} checks matched, ${fail} mismatched`);
 }

@@ -13,6 +13,8 @@ import type { PdfJob } from './types';
 export { extractPdfPages, fisToInches, groupItemsIntoLines } from './pdfText';
 export type { PdfDocumentLike, PdfPageText } from './pdfText';
 export type * from './types';
+export { suggestConnections, isHungEnd, MATCH_TOLERANCE } from './connections';
+export type { SuggestedConnection, CarriedCandidate, MatchConfidence } from './connections';
 
 export function parsePdfJob(pages: PdfPageText[]): PdfJob {
   if (isMitek8810(pages)) return parseMitek8810(pages);
