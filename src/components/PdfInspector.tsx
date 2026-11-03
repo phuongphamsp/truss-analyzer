@@ -51,7 +51,7 @@ function feetInches(totalInches: number): string {
 }
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
-export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[]) => void }) {
+export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[], tab: 'analyzer' | 'summary') => void }) {
   const [job, setJob] = useState<PdfJob | null>(null);
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -169,7 +169,16 @@ export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[]) 
               <button
                 className="px-3 py-1.5 bg-[#141414] text-white text-[10px] font-bold uppercase tracking-wider rounded disabled:opacity-40"
                 disabled={pdfGroups.length === 0}
-                onClick={() => onUseJob(pdfGroups)}
+                onClick={() => onUseJob(pdfGroups, 'analyzer')}
+                data-testid="use-pdf-input"
+                title={links ? 'Open the Analyzer: the INPUT column shows the parameters read from the PDFs' : 'Add the layout PDF first'}
+              >
+                View INPUT
+              </button>
+              <button
+                className="px-3 py-1.5 border border-[#141414] text-[10px] font-bold uppercase tracking-wider rounded disabled:opacity-40"
+                disabled={pdfGroups.length === 0}
+                onClick={() => onUseJob(pdfGroups, 'summary')}
                 data-testid="use-pdf-job"
                 title={links ? 'Open the Job Summary built from these PDFs and query the Hanger Selector' : 'Add the layout PDF first'}
               >

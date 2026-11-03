@@ -102,8 +102,9 @@ export default function App() {
 
   // Reactions depend on the region (CAN ignores load cases with a DOL outside 0.65 / 1.00 / 1.15)
   const regionGirders = useMemo(() => applyRegionReactions(girders, region), [girders, region]);
+  // the job in use: built from the PDFs when they were loaded, else from the TRE files
   const summaryGirders = useMemo(() => (pdfGirders ? applyRegionReactions(pdfGirders, region) : regionGirders), [pdfGirders, region, regionGirders]);
-  const selectedGirder = regionGirders.find(g => g.girder.id === selectedGirderId) || null;
+  const selectedGirder = summaryGirders.find(g => g.girder.id === selectedGirderId) || null;
 
   // Count resolved connections for the tab badge
   const resolvedCount = Object.keys(hangerResultsMap).length;
@@ -190,7 +191,7 @@ export default function App() {
                 </div>
                 <div className="flex-1 flex flex-col min-h-0">
                     <GirderList 
-                        girders={regionGirders}
+                        girders={summaryGirders}
                         selectedId={selectedGirderId}
                         onSelect={(id) => { setSelectedGirderId(id); setActiveTab('analyzer'); }} 
                     />
@@ -211,10 +212,11 @@ export default function App() {
                 )}
                 {activeTab === 'pdf' && (
                     <PdfInspector
-                        onUseJob={(groups) => {
+                        onUseJob={(groups, tab) => {
                             setPdfGirders(groups);
+                            setSelectedGirderId(groups[0]?.girder.id ?? null);
                             setHangerResultsMap({});
-                            setActiveTab('summary');
+                            setActiveTab(tab);
                         }}
                     />
                 )}

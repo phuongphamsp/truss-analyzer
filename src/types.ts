@@ -113,6 +113,8 @@ export interface CarriedTruss {
 }
 
 export interface GirderGroup {
+  /** where the connection data came from; the TRE route leaves it unset */
+  source?: 'pdf';
   girder: TrussInstance;
   carriedTrusses: CarriedTruss[];
 }

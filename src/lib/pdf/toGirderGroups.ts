@@ -145,7 +145,7 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
         bearingSide: 'right',
       };
     });
-    groups.push({ girder, carriedTrusses });
+    groups.push({ source: 'pdf', girder, carriedTrusses });
   }
   return groups;
 }

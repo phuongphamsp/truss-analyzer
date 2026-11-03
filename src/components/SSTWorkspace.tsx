@@ -110,11 +110,12 @@ function SectionHeader({
 }
 
 /** How a field's value was obtained — drives the badge color */
-type SourceType = 'tre' | 'tre-or-ifc' | 'computed' | 'default' | 'unknown';
+type SourceType = 'tre' | 'tre-or-ifc' | 'pdf' | 'computed' | 'default' | 'unknown';
 
 const SOURCE_META: Record<SourceType, { label: string; color: string }> = {
   tre:          { label: 'TRE',       color: 'text-emerald-500' },
   'tre-or-ifc': { label: 'TRE/IFC',  color: 'text-emerald-500' },
+  pdf:          { label: 'PDF',       color: 'text-emerald-500' },
   computed:     { label: 'computed',  color: 'text-amber-400'   },
   default:      { label: 'default',   color: 'text-zinc-500'    },
   unknown:      { label: 'unknown',   color: 'text-rose-400'    },
@@ -220,6 +221,22 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
 }) {
   const regionConfig = useRegionConfig();
   const loadSuffix = regionConfig.loadLabelSuffix;
+
+  // Rows read from the PDFs say so (instead of TRE); skew and slope are not read from the PDFs yet
+  const fromPdf = group.source === 'pdf';
+  const R = (p: React.ComponentProps<typeof Row>) => {
+    if (!fromPdf) return <Row {...p} />;
+    const unread = /^(Skew|Slope)/.test(p.label);
+    const note = unread
+      ? 'not read from the PDFs yet'
+      : p.sourceNote
+          ?.replace(/hanger line \(LG\*T 7th value\)/, 'drawing: end vertical at the hung joint')
+          .replace(/Ply=\d+ from \[ADDITIONAL TRUSS INFO\]/, 'from the sheet header')
+          .replace(/no TRE span data/, 'no span read from the drawing')
+          .replace(/TRE\/IFC|TRE/g, 'PDF');
+    const type = unread ? 'unknown' : p.sourceType === 'tre' || p.sourceType === 'tre-or-ifc' ? 'pdf' : p.sourceType;
+    return <Row {...p} sourceType={type} sourceNote={note} />;
+  };
   const toOptions = (labels: Record<number, string>) =>
     Object.entries(labels).map(([value, label]) => ({ value: Number(value), label }));
 
@@ -372,7 +389,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 { value: 3, label: 'Screws' },
               ]}
             />
-            <Row label="Building Code" value={regionConfig.codeLabels[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote={regionConfig.buildingCodeNote} />
+            <R label="Building Code" value={regionConfig.codeLabels[payload.buildingCode] ?? String(payload.buildingCode)} sourceType="default" sourceNote={regionConfig.buildingCodeNote} />
             <SelectRow
               label="Download Duration"
               value={overrides.downloadDurationType}
@@ -409,7 +426,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ]}
               />
             )}
-            <Row label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
+            <R label="Job ID" value={`${carriedLabel} on ${girderLabel}`} sourceType="tre" sourceNote="carried + girder label" />
           </div>
         )}
 
@@ -422,16 +439,16 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.carrying && (
           <div className="py-1">
-            <Row label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
-            <Row
+            <R label="Type" value={MATERIAL_LABELS[cm.material] ?? String(cm.material)} sourceType="default" sourceNote="girder = Truss type" />
+            <R
               label="Lumber Species"
               value={SPECIES_LABELS[cm.material] ?? String(cm.material)}
               sourceType={girderSpeciesStr ? 'tre-or-ifc' : 'default'}
               sourceNote={girderSpeciesStr ? `lowest bottom chord: "${girderSpeciesStr}"${substitutionNote(girderSpeciesStr, cm.material)}` : 'default: DF'}
             />
-            <Row label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
-            <Row label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
-            <Row
+            <R label="Bottom Chord Width" value={widthToNominal(cm.width)} sourceType="tre" sourceNote={`actual: ${cm.width}"`} />
+            <R label="Bottom Chord Height" value={depthToNominal(cm.depth)} sourceType="tre" sourceNote={`actual: ${cm.depth}"`} />
+            <R
               label="Number of Plies"
               value={String(cm.ply)}
               sourceType={group.girder.treData?.ply != null ? 'tre' : 'default'}
@@ -441,11 +458,11 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
             />
             {isTruss && (
               <>
-                <Row label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web the carried truss fits inside' : 'no vertical web under the carried truss'} />
-                <Row label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'lower top edge of vertical web' : 'no king post'} />
+                <R label="Vertical Width (King Post)" value={cm.kingWidth > 0 ? `${cm.kingWidth}"` : 'N/A'} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'vertical web the carried truss fits inside' : 'no vertical web under the carried truss'} />
+                <R label="Total Height" value={`${cm.kingHeight}"`} sourceType="computed" sourceNote={cm.kingWidth > 0 ? 'lower top edge of vertical web' : 'no king post'} />
               </>
             )}
-            <Row label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
+            <R label="Member ID" value={girderLabel} sourceType="tre" sourceNote="girder label" />
           </div>
         )}
 
@@ -458,20 +475,20 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.carried && (
           <div className="py-1">
-            <Row label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
-            <Row
+            <R label="Member Type" value={MATERIAL_LABELS[cd.material] ?? String(cd.material)} sourceType="default" sourceNote="carried = Truss type" />
+            <R
               label="Lumber Species"
               value={SPECIES_LABELS[cd.material] ?? String(cd.material)}
               sourceType={carriedSpeciesStr ? 'tre' : 'default'}
               sourceNote={carriedSpeciesStr ? `lowest bottom chord: "${carriedSpeciesStr}"${substitutionNote(carriedSpeciesStr, cd.material)}` : 'default: DF'}
             />
-            <Row label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
+            <R label="Bottom Chord Width" value={widthToNominal(cd.width)} sourceType="tre" sourceNote={`actual: ${cd.width}"`} />
             {isTruss ? (
-              <Row label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="hanger line (LG*T 7th value)" />
+              <R label="Heel Height" value={`${cd.depth}"`} sourceType="tre" sourceNote="hanger line (LG*T 7th value)" />
             ) : (
-              <Row label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
+              <R label="Bottom Chord Height" value={depthToNominal(cd.depth)} sourceType="tre" sourceNote={`actual: ${cd.depth}"`} />
             )}
-            <Row
+            <R
               label="Number of Plies"
               value={String(cd.ply)}
               sourceType={carried.treData?.ply != null ? 'tre' : 'default'}
@@ -479,9 +496,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ? `Ply=${carried.treData.ply} from [ADDITIONAL TRUSS INFO]`
                 : 'not in TRE'}
             />
-            <Row label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
-            <Row label={`Download (${loadSuffix})`} value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
-            <Row label={`Uplift (${loadSuffix})`} value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
+            <R label="Member ID" value={carriedLabel} sourceType="tre" sourceNote="carried label" />
+            <R label={`Download (${loadSuffix})`} value={`${cd.loads.load.toLocaleString()} lb`} highlight="down" sourceType="computed" sourceNote="from reaction analysis" />
+            <R label={`Uplift (${loadSuffix})`} value={`${cd.loads.uplift.toLocaleString()} lb`} highlight="up" sourceType="computed" sourceNote="from reaction analysis" />
           </div>
         )}
 
@@ -494,7 +511,7 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
         />
         {sections.hanger && (
           <div className="py-1">
-            <Row
+            <R
               label="Skew (Degrees)"
               value={`${cd.angle.skewRaw}°`}
               sourceType={carried.hangerAngle != null ? 'computed' : 'unknown'}
@@ -502,9 +519,9 @@ function InputPanel({ payload, girderLabel, carriedLabel, viewMode, onViewChange
                 ? `LG*T field[14]=${carried.hangerAngle}° → skew=${cd.angle.skewRaw}°`
                 : 'not available in TRE/IFC'}
             />
-            <Row label="Slope (Degrees)" value={`${cd.angle.slopeAngle}°`} sourceType="tre" sourceNote={cd.angle.slopeType === 0 ? "hanger line (block #12) = 0" : `hanger line (block #12): ${cd.angle.slopeType === 1 ? "Up" : "Down"}`} />
-            <Row label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
-            <Row label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <R label="Slope (Degrees)" value={`${cd.angle.slopeAngle}°`} sourceType="tre" sourceNote={cd.angle.slopeType === 0 ? "hanger line (block #12) = 0" : `hanger line (block #12): ${cd.angle.slopeType === 1 ? "Up" : "Down"}`} />
+            <R label="Top Flange Bend (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
+            <R label="Top Flange Slope (Degrees)" value="0°" sourceType="unknown" sourceNote="not available in TRE/IFC" />
           </div>
         )}
 
