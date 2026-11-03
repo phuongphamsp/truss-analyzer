@@ -4,6 +4,7 @@ import { LogPanel } from './components/LogPanel';
 import { GirderList } from './components/GirderList';
 import { GirderDetails } from './components/GirderDetails';
 import { JobSummaryTable } from './components/JobSummaryTable';
+import { PdfInspector } from './components/PdfInspector';
 import type { HangerResultsMap } from './components/JobSummaryTable';
 import { GirderGroup, LogEntry } from './types';
 import { analyzeFiles } from './lib/parser';
@@ -25,7 +26,7 @@ export default function App() {
   ]);
   const [girders, setGirders] = useState<GirderGroup[]>([]);
   const [selectedGirderId, setSelectedGirderId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'analyzer' | 'summary'>('analyzer');
+  const [activeTab, setActiveTab] = useState<'analyzer' | 'summary' | 'pdf'>('analyzer');
 
   // Shared inventory state (lifted from SSTWorkspace so JobSummaryTable can use it)
   const [inventory, setInventory] = useState<ParsedInventory | null>(null);
@@ -143,6 +144,17 @@ export default function App() {
                         </span>
                     )}
                 </button>
+                <button
+                    onClick={() => setActiveTab('pdf')}
+                    className={cn(
+                        'flex items-center gap-1.5 px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded transition-colors',
+                        activeTab === 'pdf'
+                            ? 'bg-[#141414] text-white'
+                            : 'text-[#141414] hover:bg-[#141414]/10'
+                    )}
+                >
+                    PDF (beta)
+                </button>
             </div>
             <div className="flex items-center space-x-2" title="Hanger Selector country">
                 <span className="text-[9px] font-bold uppercase tracking-wider opacity-60">Country</span>
@@ -192,6 +204,7 @@ export default function App() {
                         />
                     </div>
                 )}
+                {activeTab === 'pdf' && <PdfInspector />}
                 {activeTab === 'summary' && (
                     <div className="flex-1 flex overflow-hidden">
                         <JobSummaryTable
