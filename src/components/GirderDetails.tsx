@@ -16,6 +16,7 @@ import {
 import React, { useState } from 'react';
 import { cn } from '../lib/utils';
 import { SSTWorkspace } from './SSTWorkspace';
+import { PdfDrawingView } from './PdfDrawingView';
 import type { ParsedInventory } from '../lib/inventory';
 import type { SSTHangerResult } from '../lib/sst-types';
 
@@ -187,7 +188,7 @@ export function GirderDetails({ group, inventory, onInventoryChange, onHangersLo
                             <>
                                 <Cpu className="w-3.5 h-3.5 text-indigo-400" />
                                 <span className="text-[10px] font-mono uppercase font-bold tracking-wider text-zinc-300">
-                                    Truss Structural Analyzer Workspace
+                                    {group?.source === 'pdf' ? 'Engineering Sheet (PDF)' : 'Truss Structural Analyzer Workspace'}
                                 </span>
                             </>
                         )}
@@ -210,6 +211,8 @@ export function GirderDetails({ group, inventory, onInventoryChange, onHangersLo
                       onInventoryChange={onInventoryChange}
                       onHangersLoaded={onHangersLoaded}
                     />
+                ) : group.source === 'pdf' ? (
+                <PdfDrawingView group={group} selectedId={selectedCarriedId} />
                 ) : (
                 <>
                 {/* Split workspace area */}

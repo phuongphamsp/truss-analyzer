@@ -145,7 +145,12 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
         bearingSide: 'right',
       };
     });
-    groups.push({ source: 'pdf', girder, carriedTrusses });
+    const geo = g.geometry;
+    const pdfDrawing =
+      g.page !== null && geo?.originX !== undefined && geo.baseY !== undefined
+        ? { page: g.page, originX: geo.originX, baseY: geo.baseY, inchesPerPoint: geo.inchesPerPoint }
+        : undefined;
+    groups.push({ source: 'pdf', pdfDrawing, girder, carriedTrusses });
   }
   return groups;
 }

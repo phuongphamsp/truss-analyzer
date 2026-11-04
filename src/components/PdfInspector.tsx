@@ -8,6 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import type { GirderGroup } from '../types';
+import { setEngineeringPdf } from '../lib/pdf/source';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { attachGeometry, extractPdfPages, linkLayout, pdfToGirderGroups, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
 import type { LayoutPage, PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
@@ -17,6 +18,7 @@ async function readPdf(file: File): Promise<PdfJob> {
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString();
   const data = new Uint8Array(await file.arrayBuffer());
+  setEngineeringPdf(data);
   const doc = await pdfjs.getDocument({ data }).promise;
   const job = parsePdfJob(await extractPdfPages(doc as unknown as PdfDocumentLike));
   await attachGeometry(job, (n) => doc.getPage(n) as any, pdfjs.OPS as unknown as Record<string, number>);

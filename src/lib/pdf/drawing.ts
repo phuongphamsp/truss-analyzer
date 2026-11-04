@@ -232,7 +232,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
       }
     }
   }
-  return { inchesPerPoint: scale, heelByJoint, webs, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
+  return { inchesPerPoint: scale, heelByJoint, webs, originX: origin ?? undefined, baseY: chord?.baseY, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
 }
 
 /** Reads the drawing of every truss sheet of a job into `truss.geometry`. */
