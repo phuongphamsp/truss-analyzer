@@ -135,12 +135,26 @@ export function drawingScale(page: DrawingPage): number | null {
 /** x (points) of the left bearing: the tick at the end of the first negative dimension. */
 function originX(page: DrawingPage): number | null {
   const neg = page.words.find((w) => !w.rot && /^-\d+-\d+-\d+$/.test(w.str));
-  if (!neg) return null;
+  if (!neg) return firstDimensionStart(page);
   const center = neg.x + neg.w / 2;
   const ticks = page.segments
     .filter((s) => Math.abs(s.x1 - s.x2) < OPEN && segmentLength(s) > 3 && segmentLength(s) < 12 && Math.abs((s.y1 + s.y2) / 2 - neg.y) < 10 && s.x1 > center)
     .map((s) => s.x1)
     .sort((a, b) => a - b);
+  return ticks[0] ?? null;
+}
+
+/** No overhang: the left bearing is the left end of the first dimension of the top dimension row. */
+function firstDimensionStart(page: DrawingPage): number | null {
+  const dims = page.words.filter((w) => !w.rot && fisToInches(w.str) !== null);
+  if (dims.length === 0) return null;
+  const top = Math.max(...dims.map((w) => w.y));
+  const first = dims.filter((w) => Math.abs(w.y - top) < 3).sort((a, b) => a.x - b.x)[0];
+  const center = first.x + first.w / 2;
+  const ticks = page.segments
+    .filter((x) => Math.abs(x.x1 - x.x2) < OPEN && segmentLength(x) > 3 && segmentLength(x) < 12 && Math.abs((x.y1 + x.y2) / 2 - first.y) < 10 && x.x1 < center)
+    .map((x) => x.x1)
+    .sort((p, q) => q - p);
   return ticks[0] ?? null;
 }
 
