@@ -210,7 +210,8 @@ export default function App() {
                         />
                     </div>
                 )}
-                {activeTab === 'pdf' && (
+                {/* kept mounted so the PDFs already read survive a switch to another tab */}
+                <div className={activeTab === 'pdf' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
                     <PdfInspector
                         onUseJob={(groups, tab) => {
                             setPdfGirders(groups);
@@ -219,7 +220,7 @@ export default function App() {
                             setActiveTab(tab);
                         }}
                     />
-                )}
+                </div>
                 {activeTab === 'summary' && (
                     <div className="flex-1 flex overflow-hidden">
                         <JobSummaryTable
