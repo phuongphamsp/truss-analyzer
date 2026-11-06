@@ -69,6 +69,8 @@ export interface PdfTruss {
   label: string;
   /** page of the sheet whose drawing belongs to this truss */
   page: number | null;
+  /** joint of the left bearing (first joint of the bottom chord), when the sheet names chords by joints */
+  leftJoint?: string | null;
   /** read from the drawing page, when it has been (attachGeometry) */
   geometry?: TrussGeometry;
   type: string;

@@ -115,9 +115,9 @@ export interface Bar {
 }
 
 const BAR_MIN_LENGTH = 6;
-const BAR_MERGE = 1.1; // lines closer than this belong to the same bar (a truss is 1 to 4 lines about 0.8 apart)
+const DEFAULT_BAR_MERGE = 1.1; // lines closer than this belong to the same bar (a truss is 1 to 4 lines about 0.8 apart)
 
-export function buildBars(segments: Segment[]): Bar[] {
+export function buildBars(segments: Segment[], BAR_MERGE = DEFAULT_BAR_MERGE): Bar[] {
   const bars: Array<Bar & { lo: number; hi: number }> = [];
   for (const s of segments) {
     if (segLen(s) < BAR_MIN_LENGTH) continue;
@@ -201,24 +201,27 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
   const scale = inferScale(layout);
   if (!scale) return { scale, connections: [], notes: ['Could not infer the drawing scale from the dimension lines.'] };
 
-  const bars = buildBars(layout.segments);
+  // a truss is 1.5" thick on the drawing: lines up to that far apart (plus slack) are one bar
+  const bars = buildBars(layout.segments, Math.max(DEFAULT_BAR_MERGE, (1.5 / scale) * 1.3));
   const labels = new Set(job.trusses.map((t) => t.label.toUpperCase()));
   const labelWords = layout.words.filter((w) => labels.has(baseLabel(w.text).toUpperCase()));
   const connectors = layout.words.filter((w) => CONNECTOR.test(w.text) && !labels.has(w.text.toUpperCase()));
 
-  /** the bar a truss label annotates: the nearest bar whose thickness fits the truss's plies best */
-  const barOf = (w: LayoutWord, ply: number): Bar | null => {
+  /** the bars a truss label may annotate, best first: near the label, thickness close to the truss's plies */
+  const barsOf = (w: LayoutWord, ply: number): Bar[] => {
     const want = (ply * 1.5) / scale;
-    let best: { bar: Bar; score: number } | null = null;
+    const found: Array<{ bar: Bar; score: number }> = [];
     for (const b of bars) {
       if (b.thick < 0.3) continue; // dimension lines and brackets are single lines
       const d = distBoxToBar(w, b);
       if (d > 8) continue;
-      const score = d + Math.abs(b.thick - want) * 2;
-      if (!best || score < best.score) best = { bar: b, score };
+      // text runs along the bar it names: rotated text names a vertical bar
+      const alongText = b.axis === (w.rotated ? 'v' : 'h') ? 0 : 4;
+      found.push({ bar: b, score: d + Math.abs(b.thick - want) * 2 + alongText });
     }
-    return best?.bar ?? null;
+    return found.sort((p, q) => p.score - q.score).map((x) => x.bar);
   };
+  const barOf = (w: LayoutWord, ply: number): Bar | null => barsOf(w, ply)[0] ?? null;
 
   const plyOf = (label: string) => job.trusses.find((t) => t.label.toUpperCase() === label)?.ply ?? 1;
   const girders = new Map<string, number[]>();
@@ -229,14 +232,28 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
   const seen = new Set<string>();
   const connections: LayoutConnection[] = [];
 
+  // runs of identical trusses labelled once ("T-5(4)", Canadian layouts) are tried first
+  const bySeries = new Set<string>();
   for (const g of labelled.filter((l) => girders.has(l.label) && l.bar)) {
+    // the label may sit beside several lines: the right one is the bar the trusses of the sheet end on
+    for (const bar of barsOf(g.w, plyOf(g.label))) {
+      const found = linkBySeries(layout, job, g.label, bar, bars, labelWords, girders.get(g.label)!, scale);
+      if (found.length === 0) continue;
+      bySeries.add(g.label);
+      connections.push(...found);
+      break;
+    }
+  }
+
+  for (const g of labelled.filter((l) => girders.has(l.label) && l.bar && !bySeries.has(l.label))) {
     const gBar = g.bar!;
     const expected = girders.get(g.label)!;
     // bars at right angles that cross or end on this girder bar
     const attached = bars.filter((b) => {
       if (b.axis === gBar.axis || b.thick < 0.3) return false;
       const onGirder = b.c >= gBar.a0 - 1 && b.c <= gBar.a1 + 1; // its centre line lies along the girder
-      const reaches = b.a0 - 1.5 <= gBar.c && b.a1 + 1.5 >= gBar.c; // it crosses or ends on the girder
+      const reach = 1.5 + gBar.thick / 2; // a bar ends on the face of the girder, not on its centre line
+      const reaches = b.a0 - reach <= gBar.c && b.a1 + reach >= gBar.c; // it crosses or ends on the girder
       return onGirder && reaches;
     });
 
@@ -293,4 +310,119 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
     }
   }
   return { scale, connections, notes };
+}
+
+/** The run of consecutive bars (sorted along the girder) spaced like the hanger positions, or null. */
+function hangerRun(bars: Bar[], positions: number[], ascending: boolean, scale: number): Bar[] | null {
+  const n = positions.length;
+  const gaps = positions.slice(1).map((p, i) => (p - positions[i]) / scale); // points, left end first
+  const want = ascending ? gaps : [...gaps].reverse(); // bars are sorted by coordinate
+  for (let i = 0; i + n <= bars.length; i++) {
+    const run = bars.slice(i, i + n);
+    if (run.every((b, k) => k === 0 || Math.abs(b.c - run[k - 1].c - want[k - 1]) <= 3)) return run;
+  }
+  return null;
+}
+
+/** "T-5(4)" → 4, "T-4" → 1 */
+const seriesSize = (text: string) => Number(text.match(/\((\d+)\)$/)?.[1] ?? 1);
+
+/**
+ * Trusses hung on a girder when runs of identical trusses are labelled once.
+ *   - the girder's bearing reactions are printed at its ends ("R=3961#"); the one of the left bearing
+ *     says where position 0 is, and the two together delimit the trusses that belong to this girder
+ *   - the bars ending on the girder inside that stretch are the hangers: the run of consecutive bars whose
+ *     spacing equals the spacing of the hanger loads on the engineering sheet (lines of the drawing that
+ *     run on past the girder also look like bars)
+ *   - the labels beside those bars, in order, hand their quantities out to the bars one after the other
+ */
+function linkBySeries(
+  layout: LayoutPage,
+  job: PdfJob,
+  girder: string,
+  gBar: Bar,
+  bars: Bar[],
+  labelWords: LayoutWord[],
+  expected: number[],
+  scale: number
+): LayoutConnection[] {
+  const truss = job.trusses.find((t) => t.label.toUpperCase() === girder && t.hangerLoads.length > 0);
+  if (!truss) return [];
+  const alongOf = (w: LayoutWord) => (gBar.axis === 'v' ? (w.rotated ? w.y + w.w / 2 : w.y + w.h / 2) : w.rotated ? w.x - w.h / 2 : w.x + w.w / 2);
+  const acrossOf = (w: LayoutWord) => (gBar.axis === 'v' ? w.x : w.y);
+
+  // reaction labels at the ends of the girder; a printed value may carry a stray digit ("41364" for 4164)
+  const isValue = (text: string, value: number) => {
+    const d = text.replace(/\D/g, '');
+    const v = String(value);
+    if (d === v) return true;
+    if (d.length !== v.length + 1) return false;
+    let k = 0;
+    for (const ch of d) if (ch === v[k]) k++;
+    return k === v.length;
+  };
+  const reactions = layout.words.filter((w) => /^R=\d+#$/.test(w.text) && Math.abs(acrossOf(w) - gBar.c) < 40);
+  const endOf = (joint: string | undefined | null): number | null => {
+    const s = truss.supports.find((x) => x.joint === joint);
+    if (!s || s.down === null) return null;
+    const w = reactions.find((r) => isValue(r.text, s.down as number) && alongOf(r) >= gBar.a0 - 20 && alongOf(r) <= gBar.a1 + 20);
+    return w ? alongOf(w) : null;
+  };
+  const otherJoint = truss.supports.find((s) => s.joint !== truss.leftJoint)?.joint;
+  const left = endOf(truss.leftJoint);
+  const right = endOf(otherJoint);
+  if (left === null || right === null) {
+    return [];
+  }
+  const lo = Math.min(left, right);
+  const hi = Math.max(left, right);
+  const margin = 12 / scale; // about half a truss spacing
+
+  const attached = bars
+    .filter((b) => {
+      if (b.axis === gBar.axis || b.thick < 0.3) return false;
+      const reach = 1.5 + gBar.thick / 2;
+      return b.c >= lo - margin && b.c <= hi + margin && b.a0 - reach <= gBar.c && b.a1 + reach >= gBar.c;
+    })
+    .sort((p, q) => p.c - q.c);
+  // trusses hang from one side of the girder: the side whose bars and labels both add up to the hanger loads.
+  // A line that runs on past the girder (a wall line merged into a bar) counts for both sides.
+  const ascending = left <= right;
+  const positions = [...expected].sort((a, b) => a - b);
+  for (const sideName of ['before', 'after'] as const) {
+    const onSide = attached.filter((b) => (sideName === 'before' ? b.a0 < gBar.c - 3 : b.a1 > gBar.c + 3));
+    const ordered = hangerRun(onSide, positions, ascending, scale);
+    if (!ordered) continue;
+    const beside = labelWords
+      .filter((w) => baseLabel(w.text).toUpperCase() !== girder)
+      .filter((w) => (sideName === 'before' ? acrossOf(w) < gBar.c : acrossOf(w) > gBar.c))
+      .filter((w) => alongOf(w) >= ordered[0].c - margin && alongOf(w) <= ordered[ordered.length - 1].c + margin)
+      .sort((p, q) => alongOf(p) - alongOf(q));
+    // labels of other trusses sit among them: the stretch of labels whose quantities add up to the bars, nearest the bars
+    const middle = (ordered[0].c + ordered[ordered.length - 1].c) / 2;
+    let chosen: LayoutWord[] | null = null;
+    let chosenOff = Infinity;
+    for (let a = 0; a < beside.length; a++) {
+      for (let b = a; b < beside.length; b++) {
+        const window = beside.slice(a, b + 1);
+        if (window.reduce((n, w) => n + seriesSize(w.text), 0) !== ordered.length) continue;
+        const off = Math.abs((alongOf(window[0]) + alongOf(window[window.length - 1])) / 2 - middle);
+        if (off < chosenOff) {
+          chosen = window;
+          chosenOff = off;
+        }
+      }
+    }
+    if (!chosen) continue;
+    const sequence = ascending ? chosen : [...chosen].reverse();
+
+    const out: LayoutConnection[] = [];
+    let i = 0;
+    for (const w of sequence) {
+      const carried = baseLabel(w.text).toUpperCase();
+      for (let k = 0; k < seriesSize(w.text); k++, i++) out.push({ girder, carried, position: positions[i], connector: null });
+    }
+    return out;
+  }
+  return [];
 }
