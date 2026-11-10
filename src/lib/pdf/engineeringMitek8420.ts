@@ -25,6 +25,9 @@ export function isMitek8420(pages: PdfPageText[]): boolean {
   return pages.some((p) => /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(p.text));
 }
 
+// the job name may hold spaces ("THORNBURN H"): the truss name is the token before quantity and ply
+const HEADER_ROW = /^(.+?)\s+(\S+)\s+(\d+)\s+(\d+)(?:\s|$)/;
+
 // a joint is a letter ("F") or, in older versions, a number ("12")
 const J = '(?:[A-Z]{1,2}|\\d{1,3})';
 
@@ -77,7 +80,7 @@ function chordSpec(rows: LumberRow[]): PdfLumberSpec | null {
 function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
   const h = lines.findIndex((l) => /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(l));
   if (h < 0) return null;
-  const row = lines.slice(h + 1, h + 4).map((l) => l.match(/^(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\b/)).find(Boolean);
+  const row = lines.slice(h + 1, h + 4).map((l) => l.match(HEADER_ROW)).find(Boolean);
   if (!row) return null;
 
   const t: PdfTruss = {
@@ -143,8 +146,8 @@ export function parseMitek8420(pages: PdfPageText[]): PdfJob {
   for (const page of pages) {
     const t = parsePage(page.lines.map((l) => l.text), page.page);
     if (!t) continue;
-    const header = page.lines.map((l) => l.text).find((l) => /^\S+\s+\S+\s+\d+\s+\d+\b/.test(l));
-    jobName = jobName || (header ? header.split(/\s+/)[0] : '');
+    const header = page.lines.map((l) => l.text.match(HEADER_ROW)).find(Boolean);
+    jobName = jobName || (header ? header[1] : '');
     trusses.push(t);
   }
   return { format: 'mitek-canada', jobName, trusses };
