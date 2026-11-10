@@ -54,12 +54,13 @@ export function PdfDrawingView({ group, selectedId }: Props) {
   }, [drawing?.page, group.girder.id]);
 
   if (!drawing) return null;
-  const px = (inches: number) => (drawing.originX + inches / drawing.inchesPerPoint) * RENDER_SCALE;
+  const placed = drawing.originX !== undefined && drawing.baseY !== undefined && drawing.inchesPerPoint !== undefined;
+  const px = (inches: number) => ((drawing.originX ?? 0) + inches / (drawing.inchesPerPoint ?? 1)) * RENDER_SCALE;
 
   return (
     <div className="flex-1 overflow-auto bg-[#0C0D14] p-4" data-testid="pdf-drawing">
       <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
-        Engineering sheet of {group.girder.label} (page {drawing.page}) · markers = hangers read from the PDFs
+        Engineering sheet of {group.girder.label} (page {drawing.page}){placed ? ' · markers = hangers read from the PDFs' : ' · the hanger positions could not be placed on this drawing'}
       </div>
       {error && (
         <div className="flex items-start gap-2 text-[11px] text-red-300 border border-red-500/40 rounded p-3 max-w-xl">
@@ -71,11 +72,11 @@ export function PdfDrawingView({ group, selectedId }: Props) {
       )}
       <div className="relative inline-block bg-white" style={{ display: error ? 'none' : 'inline-block' }}>
         <canvas ref={canvasRef} />
-        {size && (
+        {size && placed && (
           <svg className="absolute inset-0 pointer-events-none" width={size.w} height={size.h}>
             {group.carriedTrusses.map((c) => {
               const x = px(c.localX ?? 0);
-              const yBase = (size.h / RENDER_SCALE - drawing.baseY) * RENDER_SCALE;
+              const yBase = (size.h / RENDER_SCALE - (drawing.baseY ?? 0)) * RENDER_SCALE;
               const on = c.instance.id === selectedId;
               return (
                 <g key={c.instance.id} data-testid="hanger-marker">

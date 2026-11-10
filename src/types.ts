@@ -116,7 +116,7 @@ export interface GirderGroup {
   /** where the connection data came from; the TRE route leaves it unset */
   source?: 'pdf';
   /** where the girder is drawn on its engineering page (PDF route): page, left bearing x and chord underside y in points */
-  pdfDrawing?: { page: number; originX: number; baseY: number; inchesPerPoint: number };
+  pdfDrawing?: { page: number; originX?: number; baseY?: number; inchesPerPoint?: number };
   girder: TrussInstance;
   carriedTrusses: CarriedTruss[];
 }

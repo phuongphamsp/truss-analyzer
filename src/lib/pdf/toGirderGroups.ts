@@ -146,10 +146,8 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
       };
     });
     const geo = g.geometry;
-    const pdfDrawing =
-      g.page !== null && geo?.originX !== undefined && geo.baseY !== undefined
-        ? { page: g.page, originX: geo.originX, baseY: geo.baseY, inchesPerPoint: geo.inchesPerPoint }
-        : undefined;
+    // the sheet is shown even when the drawing could not be placed; markers need all three
+    const pdfDrawing = g.page !== null ? { page: g.page, originX: geo?.originX, baseY: geo?.baseY, inchesPerPoint: geo?.inchesPerPoint } : undefined;
     groups.push({ source: 'pdf', pdfDrawing, girder, carriedTrusses });
   }
   return groups;

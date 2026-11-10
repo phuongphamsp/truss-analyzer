@@ -104,11 +104,20 @@ function horizontalLines(segments: Segment[], maxLength: number): HLine[] {
 }
 
 /** Inches per point: "Scale = 1:N" gives N/72, the dimension strings between their ticks refine it. */
+/** The printed scale as inches per point: "Scale = 1:40.3" or "Scale: 1/4"=1'" (1/4 inch on paper = 1 foot). */
+function printedScale(page: DrawingPage): number | null {
+  for (const w of page.words) {
+    const ratio = w.str.match(/^Scale\s*[:=]\s*1:([\d.]+)/);
+    if (ratio) return Number(ratio[1]) / 72;
+    const architect = w.str.match(/^Scale\s*[:=]\s*(\d+)\s*\/\s*(\d+)\s*"\s*=\s*1'/);
+    if (architect) return 12 / (Number(architect[1]) / Number(architect[2])) / 72;
+  }
+  return null;
+}
+
 export function drawingScale(page: DrawingPage): number | null {
-  const text = page.words.find((w) => /^Scale\s*=\s*1:[\d.]+/.test(w.str));
-  const n = text ? Number(text.str.match(/1:([\d.]+)/)?.[1]) : NaN;
-  if (!Number.isFinite(n)) return null;
-  const nominal = n / 72;
+  const nominal = printedScale(page);
+  if (nominal === null || !Number.isFinite(nominal)) return null;
 
   const ticks = page.segments.filter((s) => Math.abs(s.x1 - s.x2) < OPEN && segmentLength(s) > 3 && segmentLength(s) < 12);
   const ratios: number[] = [];
@@ -159,15 +168,15 @@ function firstDimensionStart(page: DrawingPage): number | null {
 }
 
 /** y (points) of the underside of the bottom chord and the chord depth: the lowest pair of horizontal lines a lumber depth apart. */
-function bottomChord(page: DrawingPage, scale: number): { baseY: number; depthPts: number } | null {
+function bottomChord(page: DrawingPage, scale: number): { baseY: number; depthPts: number; leftX: number } | null {
   const lines = horizontalLines(page.segments, page.width * 0.9).sort((a, b) => a.y - b.y);
   for (const lo of lines) {
     for (const hi of lines) {
       if (hi.y <= lo.y) continue;
       const depth = nearestDepth((hi.y - lo.y) * scale);
       if (depth === null) continue;
-      const overlap = lo.runs.some(([a, b]) => hi.runs.some(([c, d]) => Math.min(b, d) - Math.max(a, c) > 20));
-      if (overlap) return { baseY: lo.y, depthPts: hi.y - lo.y };
+      const run = lo.runs.find(([a, b]) => hi.runs.some(([c, d]) => Math.min(b, d) - Math.max(a, c) > 20));
+      if (run) return { baseY: lo.y, depthPts: hi.y - lo.y, leftX: run[0] };
     }
   }
   return null;
@@ -223,8 +232,9 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
 
   // --- vertical webs: two vertical faces one lumber depth apart, standing on the bottom chord ---
   const webs: VerticalWeb[] = [];
-  const origin = originX(page);
   const chord = bottomChord(page, scale);
+  // no dimension ticks to read the left bearing from (Canadian sheets): the left end of the bottom chord
+  const origin = originX(page) ?? chord?.leftX ?? null;
   if (origin !== null && chord) {
     const standing = vlines.flatMap((v) =>
       v.runs
