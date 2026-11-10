@@ -140,15 +140,27 @@ function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
   return t;
 }
 
+/** The truss name printed in the header of a page, or null for a page that is not a truss sheet. */
+function sheetLabel(lines: string[]): { label: string; job: string } | null {
+  const h = lines.findIndex((l) => /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(l));
+  if (h < 0) return null;
+  const row = lines.slice(h + 1, h + 4).map((l) => l.match(HEADER_ROW)).find(Boolean);
+  return row ? { label: row[2], job: row[1] } : null;
+}
+
 export function parseMitek8420(pages: PdfPageText[]): PdfJob {
-  const trusses: PdfTruss[] = [];
   let jobName = '';
+  // a sheet can run over several pages ("CONTINUED ON PAGE 2"): consecutive pages of one truss are read as one
+  const sheets: Array<{ label: string; page: number; lines: string[] }> = [];
   for (const page of pages) {
-    const t = parsePage(page.lines.map((l) => l.text), page.page);
-    if (!t) continue;
-    const header = page.lines.map((l) => l.text.match(HEADER_ROW)).find(Boolean);
-    jobName = jobName || (header ? header[1] : '');
-    trusses.push(t);
+    const lines = page.lines.map((l) => l.text);
+    const head = sheetLabel(lines);
+    if (!head) continue;
+    jobName = jobName || head.job;
+    const last = sheets[sheets.length - 1];
+    if (last && last.label === head.label) last.lines.push(...lines);
+    else sheets.push({ label: head.label, page: page.page, lines: [...lines] });
   }
+  const trusses = sheets.map((sh) => parsePage(sh.lines, sh.page)).filter((t): t is PdfTruss => t !== null);
   return { format: 'mitek-canada', jobName, trusses };
 }
