@@ -21,9 +21,9 @@ import type {
   PdfTruss,
 } from './types';
 
+/** Any page: a set can start with a seal letter and MiTek's general reference sheet before the first truss. */
 export function isMitek8810(pages: PdfPageText[]): boolean {
-  const first = pages[0]?.text ?? '';
-  return /Job\s+Truss\s+Truss Type/.test(first) && /MiTek Industries/.test(first);
+  return pages.some((p) => /Job\s+Truss\s+Truss Type/.test(p.text) && /MiTek Industries/.test(p.text));
 }
 
 function emptyTruss(label: string, type: string, page: number): PdfTruss {

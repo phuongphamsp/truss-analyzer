@@ -20,17 +20,21 @@ import type { PdfPageText } from './pdfText';
 import { fisToInches } from './pdfText';
 import type { PdfHangerLoad, PdfJob, PdfLumberSpec, PdfSupport, PdfTruss } from './types';
 
+/** Any page: a set can start with a seal letter and MiTek's general reference sheet before the first truss. */
 export function isMitek8420(pages: PdfPageText[]): boolean {
-  const first = pages[0]?.text ?? '';
-  return /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(first);
+  return pages.some((p) => /JOB NAME\s+TRUSS NAME\s+QUANTITY/.test(p.text));
 }
 
-const BEARING_ROW =
-  /(?:^|\s)([A-Z]{1,2}(?:\([A-Z]\))?)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(MECHANICAL|[\d-]+)(?:\s+[\d-]+)?/;
+// a joint is a letter ("F") or, in older versions, a number ("12")
+const J = '(?:[A-Z]{1,2}|\\d{1,3})';
+
+const BEARING_ROW = new RegExp(
+  `(?:^|\\s)(${J}(?:\\([A-Z]\\))?)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(MECHANICAL|[\\d-]+)(?:\\s+[\\d-]+)?`
+);
 // the location is feet-inches-sixteenths ("4-8-12") or, under a foot, inches-sixteenths ("8-12")
-const CONCENTRATED_ROW = /(?:^|\s)([A-Z]{1,2})\s+(\d+-\d+(?:-\d+)?)\s+(-?\d+)\s+(-?\d+)/;
-const LUMBER_ROW = /(?:^|\s)([A-Z])\s*-\s*([A-Z])\s+(\d)x(\d+)\s+DRY\s+(.+?)\s+(SPF|SP|DF|HF|[A-Z]{2,4})(?:\s|$)/;
-const CHORD_PIECE = /(?:^|\s)([A-Z])-\s*([A-Z])\s+-?\d+\s*\/\s*-?\d+\s+(-?[\d.]+)\s+-?[\d.]+\s+[\d.]+\s+\(\d+\)\s+[\d.]+/g;
+const CONCENTRATED_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(\\d+-\\d+(?:-\\d+)?)\\s+(-?\\d+)\\s+(-?\\d+)`);
+const LUMBER_ROW = new RegExp(`(?:^|\\s)(${J})\\s*-\\s*(${J})\\s+(\\d)x(\\d+)\\s+DRY\\s+(.+?)\\s+(SPF|SP|DF|HF|[A-Z]{2,4})(?:\\s|$)`);
+const CHORD_PIECE = new RegExp(`(?:^|\\s)(${J})-\\s*(${J})\\s+-?\\d+\\s*\\/\\s*-?\\d+\\s+(-?[\\d.]+)\\s+-?[\\d.]+\\s+[\\d.]+\\s+\\(\\d+\\)\\s+[\\d.]+`, 'g');
 
 function locationInches(loc: string): number | null {
   const parts = loc.split('-').map(Number);
