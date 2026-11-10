@@ -3,7 +3,8 @@
  * Kept independent of the TRE model so a PDF can feed the app without a TRE file.
  */
 
-export type PdfFormat = 'mitek-8.810' | 'mitek-8.420';
+/** The layout of the sheets: MiTek US sheets (software 8.810) or MiTek Canadian sheets (8.420, 8.030, 25.2 ... share one layout). */
+export type PdfFormat = 'mitek-us' | 'mitek-canada';
 
 export interface PdfLumberSpec {
   size: string;    // "2x8"
@@ -90,6 +91,8 @@ export interface PdfTruss {
 
 export interface PdfJob {
   format: PdfFormat;
+  /** country the sheets were made for, guessed from the design code printed on them (null when unclear) */
+  regionHint?: { region: 'us' | 'can'; evidence: string[] } | null;
   jobName: string;
   trusses: PdfTruss[];
 }

@@ -107,7 +107,7 @@ async function main() {
         continue;
       }
       const hit = pc.supports.find(
-        (s) => s.down !== null && Math.abs(s.down - down) <= 1 && (job.format === 'mitek-8.810' || Math.abs(Math.abs(s.uplift ?? 0) - up) <= 1)
+        (s) => s.down !== null && Math.abs(s.down - down) <= 1 && (job.format === 'mitek-us' || Math.abs(Math.abs(s.uplift ?? 0) - up) <= 1)
       );
       check(!!hit, `${label} <- ${c.instance.label}@${c.localX} down ${down} up ${up}`, `PDF supports: ${pc.supports.map((s) => `${s.joint}:${s.down}/${s.uplift ?? '-'}`).join(' ')}`);
     }

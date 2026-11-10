@@ -147,5 +147,5 @@ export function parseMitek8420(pages: PdfPageText[]): PdfJob {
     jobName = jobName || (header ? header.split(/\s+/)[0] : '');
     trusses.push(t);
   }
-  return { format: 'mitek-8.420', jobName, trusses };
+  return { format: 'mitek-canada', jobName, trusses };
 }

@@ -213,6 +213,7 @@ export default function App() {
                 {/* kept mounted so the PDFs already read survive a switch to another tab */}
                 <div className={activeTab === 'pdf' ? 'flex-1 flex flex-col min-h-0' : 'hidden'}>
                     <PdfInspector
+                        onRegionChange={handleRegionChange}
                         onUseJob={(groups, tab) => {
                             setPdfGirders(groups);
                             setSelectedGirderId(groups[0]?.girder.id ?? null);

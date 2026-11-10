@@ -9,6 +9,8 @@
 import { useMemo, useState } from 'react';
 import type { GirderGroup } from '../types';
 import { setEngineeringPdf } from '../lib/pdf/source';
+import { useRegion } from '../lib/region';
+import type { SSTRegion } from '../lib/sst-types';
 import { FileText, AlertCircle, Loader2 } from 'lucide-react';
 import { attachGeometry, extractPdfPages, linkLayout, pdfToGirderGroups, parsePdfJob, readLayoutPage, suggestConnections } from '../lib/pdf';
 import type { LayoutPage, PdfDocumentLike, PdfJob, PdfLumberSpec, PdfTruss, SuggestedConnection } from '../lib/pdf';
@@ -53,7 +55,8 @@ function feetInches(totalInches: number): string {
 }
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
 
-export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[], tab: 'analyzer' | 'summary') => void }) {
+export function PdfInspector({ onUseJob, onRegionChange }: { onUseJob?: (groups: GirderGroup[], tab: 'analyzer' | 'summary') => void; onRegionChange?: (region: SSTRegion) => void }) {
+  const region = useRegion();
   const [job, setJob] = useState<PdfJob | null>(null);
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -163,6 +166,24 @@ export function PdfInspector({ onUseJob }: { onUseJob?: (groups: GirderGroup[], 
             <div className="text-[11px] font-mono" data-testid="layout-summary">
               layout {layoutName} · scale {links.scale ?? '–'} in/pt · {links.connections.length} connections found
               {links.notes.map((n, i) => <div key={i} className="text-amber-800">note: {n}</div>)}
+            </div>
+          )}
+
+          {job.regionHint && job.regionHint.region !== region && (
+            <div className="flex items-center gap-3 text-[11px] bg-amber-50 border border-amber-400 text-amber-900 rounded p-3 max-w-2xl" data-testid="region-warning">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>
+                These sheets look made for <b>{job.regionHint.region === 'can' ? 'Canada' : 'the US'}</b> ({job.regionHint.evidence.join(', ')}), but the
+                country selected is <b>{region === 'can' ? 'CAN' : 'USA'}</b>.
+              </span>
+              {onRegionChange && (
+                <button
+                  className="ml-auto px-2 py-1 border border-amber-700 rounded font-bold uppercase text-[10px] hover:bg-amber-100"
+                  onClick={() => onRegionChange(job.regionHint!.region)}
+                >
+                  Switch to {job.regionHint.region === 'can' ? 'CAN' : 'USA'}
+                </button>
+              )}
             </div>
           )}
 

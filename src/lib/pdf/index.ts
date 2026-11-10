@@ -8,6 +8,7 @@
 import { isMitek8420, parseMitek8420 } from './engineeringMitek8420';
 import { isMitek8810, parseMitek8810 } from './engineeringMitek8810';
 import type { PdfPageText } from './pdfText';
+import { detectRegion } from './regionHint';
 import type { PdfJob } from './types';
 
 export { extractPdfPages, fisToInches, groupItemsIntoLines } from './pdfText';
@@ -19,12 +20,15 @@ export { readLayoutPage, linkLayout, inferScale, buildBars } from './layout';
 export type { LayoutPage, LayoutLinks, LayoutConnection, Bar } from './layout';
 export { attachGeometry, readDrawingPage, readTrussGeometry, drawingScale } from './drawing';
 export type { DrawingPage } from './drawing';
+export { detectRegion } from './regionHint';
+export type { RegionHint } from './regionHint';
 export { pdfToGirderGroups } from './toGirderGroups';
 export { extractSegments } from './pdfVectors';
 export type { Segment } from './pdfVectors';
 
 export function parsePdfJob(pages: PdfPageText[]): PdfJob {
-  if (isMitek8810(pages)) return parseMitek8810(pages);
-  if (isMitek8420(pages)) return parseMitek8420(pages);
+  const hint = detectRegion(pages);
+  if (isMitek8810(pages)) return { ...parseMitek8810(pages), regionHint: hint };
+  if (isMitek8420(pages)) return { ...parseMitek8420(pages), regionHint: hint };
   throw new Error('Unrecognised engineering PDF format (expected a MiTek 8.810 or 8.420 sheet set).');
 }

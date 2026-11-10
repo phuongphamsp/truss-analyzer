@@ -179,5 +179,5 @@ export function parseMitek8810(pages: PdfPageText[]): PdfJob {
     parseHangerLoads(sheet.lines, sheet.truss);
     trusses.push(sheet.truss);
   }
-  return { format: 'mitek-8.810', jobName, trusses };
+  return { format: 'mitek-us', jobName, trusses };
 }
