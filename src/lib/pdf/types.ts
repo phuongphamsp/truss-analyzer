@@ -30,6 +30,8 @@ export interface PdfSupport {
   upliftLoadCase: number | null;
   /** chord the joint lies on, when the sheet names chords by joints (Canadian format) */
   chord?: 'TC' | 'BC' | null;
+  /** which load produces the largest uplift at this joint, from the unfactored component reactions (wind, or snow / live / dead) */
+  upliftSource?: 'wind' | 'other' | null;
 }
 
 export interface PdfHangerLoad {

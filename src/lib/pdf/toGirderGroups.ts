@@ -172,6 +172,8 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
             : undefined,
         downReaction: support?.down ?? h.load,
         upliftReaction: support?.uplift ?? 0,
+        // Canadian sheets: where the factored uplift is not zero, wind uplift is short term (1.15), snow / live / dead uplift standard term (1.00)
+        upliftDolFactor: !support?.uplift ? undefined : support.upliftSource === 'wind' ? 1.15 : support.upliftSource === 'other' ? 1.0 : undefined,
         bearingSide: 'right',
       };
     });

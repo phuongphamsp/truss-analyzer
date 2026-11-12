@@ -39,6 +39,26 @@ const CONCENTRATED_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(\\d+-\\d+(?:-\\d+)?)\\s
 const LUMBER_ROW = new RegExp(`(?:^|\\s)(${J})\\s*-\\s*(${J})\\s+(\\d)x(\\d+)\\s+DRY\\s+(.+?)\\s+(SPF|SP|DF|HF|[A-Z]{2,4})(?:\\s|$)`);
 const CHORD_PIECE = new RegExp(`(?:^|\\s)(${J})-\\s*(${J})\\s+-?\\d+\\s*\\/\\s*-?\\d+\\s+(-?[\\d.]+)\\s+-?[\\d.]+\\s+[\\d.]+\\s+\\(\\d+\\)\\s+[\\d.]+`, 'g');
 
+// UNFACTORED REACTIONS:  JT  COMBINED  SNOW  LIVE  PERM.LIVE  WIND  DEAD  SOIL, each "max / min"
+const PAIR = '(-?\\d+)\\s*\\/\\s*(-?\\d+)';
+const COMPONENT_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(?:\\d+|---)\\s+${[1, 2, 3, 4, 5, 6].map(() => PAIR).join('\\s+')}`);
+
+/** Per joint, which component gives the largest uplift: wind, or one of the others (snow, live, dead ...). */
+function readUpliftSources(lines: string[]): Map<string, 'wind' | 'other' | null> {
+  const out = new Map<string, 'wind' | 'other' | null>();
+  const header = lines.findIndex((l) => /JT\s+COMBINED\s+SNOW\s+LIVE\s+PERM\.LIVE\s+WIND\s+DEAD\s+SOIL/.test(l));
+  if (header < 0) return out;
+  for (let i = header + 1; i < lines.length; i++) {
+    const m = lines[i].match(COMPONENT_ROW);
+    if (!m || out.has(m[1])) continue;
+    // minimum of each component: snow, live, permanent live, wind, dead, soil
+    const mins = [3, 5, 7, 9, 11, 13].map((k) => Number(m[k]));
+    const lowest = Math.min(...mins);
+    out.set(m[1], lowest < 0 ? (mins.indexOf(lowest) === 3 ? 'wind' : 'other') : null);
+  }
+  return out;
+}
+
 function locationInches(loc: string): number | null {
   const parts = loc.split('-').map(Number);
   if (parts.some((p) => !Number.isFinite(p))) return null;
@@ -156,6 +176,8 @@ function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
 
   const chords = readChords(lines);
   for (const s of t.supports) s.chord = chords.chordOf(s.joint);
+  const sources = readUpliftSources(lines);
+  for (const s of t.supports) s.upliftSource = sources.get(s.joint) ?? null;
   t.topChord = chordSpec(chords.top);
   t.botChord = chordSpec(chords.bottom);
   // the left bearing is where the bottom chord starts: a joint that no bottom row ends on
