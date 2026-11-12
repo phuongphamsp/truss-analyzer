@@ -138,11 +138,11 @@ interface MemberDims {
  * Find the bottom chord member with the largest cross-section from treData.members.
  * Returns actual lumber dimensions (inches), e.g. width=1.5, depth=3.5 for a 2x4.
  */
-function findBottomChord(members: TreData['members']): MemberDims | null {
+function findBottomChord(members: TreData['members'], type: 'BottomChord' | 'TopChord' = 'BottomChord'): MemberDims | null {
   if (!members || members.length === 0) return null;
 
   const bcs = members.filter(
-    (m) => m.type === 'BottomChord' && m.width > 0 && m.depth > 0
+    (m) => m.type === type && m.width > 0 && m.depth > 0
   );
   if (bcs.length === 0) return null;
 
@@ -327,6 +327,14 @@ export function getGirderSpecies(group: GirderGroup): string | undefined {
   );
 }
 
+/** Spec string of the (largest) top chord member, when the model has one (PDF jobs). */
+function topChordSpec(members: TreData['members']): string | undefined {
+  const tcs = (members ?? []).filter((m) => m.type === 'TopChord' && m.width > 0 && m.depth > 0);
+  if (tcs.length === 0) return undefined;
+  const pick = tcs.reduce((a, b) => (b.width * b.depth > a.width * a.depth ? b : a));
+  return `${pick.size} ${pick.grade} ${pick.species}`;
+}
+
 /** Bottom-chord species string of the carried truss */
 export function getCarriedSpecies(carried: CarriedTruss): string | undefined {
   return (
@@ -413,7 +421,11 @@ export function buildSSTPayload(
   region: SSTRegion = DEFAULT_REGION
 ): SSTPayload {
   // --- Carrying member (girder) ---
-  const girderBC = findBottomChord(group.girder.treData?.members);
+  // PDF jobs: a connection on the top chord of the girder hangs from the top chord (its size and species)
+  const onTopChord = group.source === 'pdf' && carried.hanger?.chord === 1;
+  const girderBC =
+    (onTopChord ? carried.carryingChord ?? findBottomChord(group.girder.treData?.members, 'TopChord') : null) ??
+    findBottomChord(group.girder.treData?.members);
   const girderWidth = girderBC?.width ?? 1.5;
   const girderDepth = girderBC?.depth ?? 5.5;
 
@@ -437,7 +449,7 @@ export function buildSSTPayload(
   // Species → material code for girder (carrying member).
   // Use the bottom chord species from cuttingMembers (authoritative) or
   // fall back to the majority bottomChord spec string (e.g. "2x6 No.2 SP").
-  const girderMaterial = resolveMaterial(getGirderSpecies(group), region);
+  const girderMaterial = resolveMaterial(onTopChord ? (carried.carryingChord ? carried.carryingChord.species : topChordSpec(group.girder.treData?.members)) ?? getGirderSpecies(group) : getGirderSpecies(group), region);
 
   const carryingMember: SSTCarryingMember = {
     material: girderMaterial,

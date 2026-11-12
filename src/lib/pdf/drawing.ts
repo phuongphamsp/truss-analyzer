@@ -109,8 +109,9 @@ function printedScale(page: DrawingPage): number | null {
   for (const w of page.words) {
     const ratio = w.str.match(/^Scale\s*[:=]\s*1:([\d.]+)/);
     if (ratio) return Number(ratio[1]) / 72;
-    const architect = w.str.match(/^Scale\s*[:=]\s*(\d+)\s*\/\s*(\d+)\s*"\s*=\s*1'/);
-    if (architect) return 12 / (Number(architect[1]) / Number(architect[2])) / 72;
+    // 1/4"=1' or 1"=1': a paper fraction (or whole number) of an inch stands for one foot
+    const architect = w.str.match(/^Scale\s*[:=]\s*(\d+(?:\.\d+)?)(?:\s*\/\s*(\d+))?\s*"\s*=\s*1'/);
+    if (architect) return 12 / (Number(architect[1]) / Number(architect[2] ?? 1)) / 72;
   }
   return null;
 }
@@ -230,6 +231,21 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
     if (best > 0) heelByJoint[s.joint] = snapToDimension(page, best);
   }
 
+  // --- top chord pitch at a hung joint on the top chord: the nearest "4.00 12" label of the drawing ---
+  const slopeByJoint: Record<string, number> = {};
+  const pitches = page.words
+    .map((w) => ({ w, rise: Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]) }))
+    .filter((p) => Number.isFinite(p.rise) && !p.w.rot);
+  for (const s of truss.supports.filter((x) => isHungEnd(x) && x.chord === 'TC')) {
+    const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > 400 && x.y < 735);
+    let best: { rise: number; d: number } | null = null;
+    for (const j of joints) for (const p of pitches) {
+      const d = Math.hypot(j.x - p.w.x, j.y - p.w.y);
+      if (!best || d < best.d) best = { rise: p.rise, d };
+    }
+    if (best) slopeByJoint[s.joint] = (Math.atan(best.rise / 12) * 180) / Math.PI;
+  }
+
   // --- vertical webs: two vertical faces one lumber depth apart, standing on the bottom chord ---
   const webs: VerticalWeb[] = [];
   const chord = bottomChord(page, scale);
@@ -256,7 +272,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
       }
     }
   }
-  return { inchesPerPoint: scale, heelByJoint, webs, originX: origin ?? undefined, baseY: chord?.baseY, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
+  return { inchesPerPoint: scale, heelByJoint, slopeByJoint, webs, originX: origin ?? undefined, baseY: chord?.baseY, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
 }
 
 /** Reads the drawing of every truss sheet of a job into `truss.geometry`. */

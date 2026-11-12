@@ -28,6 +28,8 @@ export interface PdfSupport {
   bearing: string | null;
   /** load case of the maximum uplift, when printed ("LC 12") */
   upliftLoadCase: number | null;
+  /** chord the joint lies on, when the sheet names chords by joints (Canadian format) */
+  chord?: 'TC' | 'BC' | null;
 }
 
 export interface PdfHangerLoad {
@@ -39,6 +41,8 @@ export interface PdfHangerLoad {
   chord: 'TC' | 'BC' | null;
   /** joint of the load, when the sheet gives one (Canadian format) */
   joint: string | null;
+  /** lumber of the chord piece the load sits on, when the sheet names chords by joints */
+  spec?: PdfLumberSpec | null;
 }
 
 /** A vertical web read from the drawing: two faces one lumber depth apart, standing on the bottom chord. */
@@ -58,6 +62,8 @@ export interface TrussGeometry {
   inchesPerPoint: number;
   /** heel height (inches) of the hung end at a joint */
   heelByJoint: Record<string, number>;
+  /** pitch (degrees) of the top chord at a hung joint that lies on the top chord */
+  slopeByJoint?: Record<string, number>;
   /** page position of the left bearing (x) and the underside of the bottom chord (y), in points */
   originX?: number;
   baseY?: number;

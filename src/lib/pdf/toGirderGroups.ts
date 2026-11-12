@@ -61,6 +61,20 @@ function treDataFor(t: PdfTruss, hangers: NonNullable<TreData['hangers']>): TreD
         },
       ]
     : [];
+  if (t.topChord) {
+    const [tw, td] = ACTUAL[t.topChord.size] ?? [1.5, 3.5];
+    members.push({
+      name: 'T1',
+      type: 'TopChord',
+      size: t.topChord.size,
+      grade: t.topChord.grade,
+      species: t.topChord.species,
+      width: tw,
+      depth: td,
+      coords: [{ x: 0, y: 10 }, { x: 1, y: 10 }],
+      isStructural: true,
+    });
+  }
   return {
     label: t.label,
     topChord: specString(t.topChord),
@@ -77,11 +91,16 @@ function treDataFor(t: PdfTruss, hangers: NonNullable<TreData['hangers']>): TreD
   };
 }
 
-/** The hung-end support of a carried truss whose reaction is closest to the girder load. */
-function hungSupport(t: PdfTruss, load: number): PdfSupport | null {
+/**
+ * The hung-end support of a carried truss for a girder load: on the same chord as the load when the sheets
+ * say which chord each is on (a truss can hang from both chords of a girder), the reaction closest to the load.
+ */
+function hungSupport(t: PdfTruss, load: number, chord: 'TC' | 'BC' | null): PdfSupport | null {
   const ends = t.supports.filter(isHungEnd);
-  if (ends.length === 0) return null;
-  return ends.reduce((best, s) => (Math.abs((s.down as number) - load) < Math.abs((best.down as number) - load) ? s : best));
+  const sameChord = chord ? ends.filter((s) => s.chord === chord) : [];
+  const pool = sameChord.length > 0 ? sameChord : ends;
+  if (pool.length === 0) return null;
+  return pool.reduce((best, s) => (Math.abs((s.down as number) - load) < Math.abs((best.down as number) - load) ? s : best));
 }
 
 export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[] {
@@ -97,11 +116,17 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
     if (g.hangerLoads.length === 0) continue;
     const gLabel = g.label.toUpperCase();
 
-    // heel of the hung end of the carried truss, read from its drawing (0 = not read)
-    const heelOf = (carried: string, load: number) => {
+    // heel and slope of the hung end of the carried truss, read from its drawing (0 = not read).
+    // On a top chord the end is cut square: its height is the chord depth over the cosine of the pitch.
+    const endOf = (carried: string, load: number, chord: 'TC' | 'BC' | null) => {
       const ct = byLabel.get(carried);
-      const support = ct ? hungSupport(ct, load) : null;
-      return (support && ct?.geometry?.heelByJoint[support.joint]) || 0;
+      const support = ct ? hungSupport(ct, load, chord) : null;
+      const slope = (support && ct?.geometry?.slopeByJoint?.[support.joint]) || 0;
+      if (support && ct && support.chord === 'TC' && slope > 0) {
+        const depth = ACTUAL[ct.topChord?.size ?? '2x4']?.[1] ?? 3.5;
+        return { heel: Math.round((depth / Math.cos((slope * Math.PI) / 180)) * 1000) / 1000, slope };
+      }
+      return { heel: (support && ct?.geometry?.heelByJoint[support.joint]) || 0, slope: 0 };
     };
 
     // one hanger line per hanger load; the carried truss comes from the layout
@@ -116,10 +141,10 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
       xInches: h.position,
       label: link!.carried,
       width: 1.5,
-      heelHeight: heelOf(link!.carried, h.load),
+      heelHeight: endOf(link!.carried, h.load, h.chord).heel,
       bearingLocation: 0,
       angle: 90, // square: skew not read yet
-      slope: 0, // not read yet
+      slope: endOf(link!.carried, h.load, h.chord).slope,
       chord: h.chord === 'TC' ? 1 : 2,
     }));
 
@@ -132,7 +157,7 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
 
     const carriedTrusses: CarriedTruss[] = rows.map(({ h, link }, i) => {
       const ct = byLabel.get(link!.carried);
-      const support = ct ? hungSupport(ct, h.load) : null;
+      const support = ct ? hungSupport(ct, h.load, h.chord) : null;
       return {
         instance: { id: `PDF_${link!.carried}_${i}`, label: link!.carried, isGirder: false },
         localX: h.position,
@@ -140,6 +165,11 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
         treData: ct ? treDataFor(ct, []) : undefined,
         hangerAngle: 90,
         hanger: hangers[i],
+        // a load on the top chord hangs from the top chord piece it sits on (its size and species)
+        carryingChord:
+          h.chord === 'TC' && h.spec
+            ? { width: (ACTUAL[h.spec.size] ?? [1.5, 3.5])[0], depth: (ACTUAL[h.spec.size] ?? [1.5, 3.5])[1], species: h.spec.species }
+            : undefined,
         downReaction: support?.down ?? h.load,
         upliftReaction: support?.uplift ?? 0,
         bearingSide: 'right',
