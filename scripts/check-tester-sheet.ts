@@ -94,7 +94,7 @@ async function main() {
     check(`${tag} carried species`, speciesOf(getCarriedSpecies(c)) === String(row['Carried: species']).toUpperCase(), `PDF ${getCarriedSpecies(c)}`);
     check(`${tag} carried bottom chord width`, near(cm.width, num(row['Carried: bottom chord width (in)'])), `PDF ${cm.width}`);
     check(`${tag} carried plies`, cm.ply === num(row['Carried: plies']), `PDF ${cm.ply}`);
-    check(`${tag} heel`, near(cm.depth, num(row['Heel height (in)'])), `PDF ${cm.depth}`);
+    check(`${tag} heel`, near(cm.depth, num(row['Heel height (in)'])), `PDF ${cm.depth}, tester ${num(row['Heel height (in)'])}`);
     check(`${tag} download`, near(cm.loads.load, num(row['Download (lb)']), 1), `PDF ${cm.loads.load}`);
     check(`${tag} uplift`, near(cm.loads.uplift, num(row['Uplift (lb)']), 1), `PDF ${cm.loads.uplift}`);
     check(`${tag} skew`, near(cm.angle.skewAngle, num(row['Skew (deg)']), 0.5), `PDF ${cm.angle.skewAngle}`);

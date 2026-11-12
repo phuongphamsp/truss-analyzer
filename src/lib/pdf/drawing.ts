@@ -34,6 +34,8 @@ export interface DrawingPage {
 const OPEN = 0.05; // points: a segment this close to axis-aligned counts as vertical / horizontal
 const GAP = 0.6; // points: collinear pieces closer than this are one line
 const DEPTHS = [2.5, 3.5, 5.5, 7.25, 9.25, 11.25]; // actual lumber depths (inches)
+const HEEL_GAP = 4; // points: plates drawn over an end vertical break it into pieces this far apart
+const END_TOLERANCE = 3; // points: the outer face of an end vertical lines up with the end of the bottom chord
 const DEPTH_TOLERANCE = 0.3; // inches: the drawn face spacing vs the lumber depth
 
 const nearestDepth = (inches: number): number | null => {
@@ -63,7 +65,7 @@ interface VLine {
   runs: Array<[number, number]>;
 }
 
-function verticalLines(segments: Segment[]): VLine[] {
+function verticalLines(segments: Segment[], gap = GAP): VLine[] {
   const byX = new Map<number, Array<[number, number]>>();
   for (const s of segments) {
     if (Math.abs(s.x1 - s.x2) > OPEN || segmentLength(s) < 1) continue;
@@ -72,15 +74,15 @@ function verticalLines(segments: Segment[]): VLine[] {
     list.push([Math.min(s.y1, s.y2), Math.max(s.y1, s.y2)]);
     byX.set(key, list);
   }
-  return [...byX].map(([x, list]) => ({ x, runs: mergeRuns(list) }));
+  return [...byX].map(([x, list]) => ({ x, runs: mergeRuns(list, gap) }));
 }
 
-function mergeRuns(list: Array<[number, number]>): Array<[number, number]> {
+function mergeRuns(list: Array<[number, number]>, gap = GAP): Array<[number, number]> {
   const sorted = [...list].sort((a, b) => a[0] - b[0]);
   const out: Array<[number, number]> = [];
   for (const r of sorted) {
     const last = out[out.length - 1];
-    if (last && r[0] <= last[1] + GAP) last[1] = Math.max(last[1], r[1]);
+    if (last && r[0] <= last[1] + gap) last[1] = Math.max(last[1], r[1]);
     else out.push([r[0], r[1]]);
   }
   return out;
@@ -169,18 +171,23 @@ function firstDimensionStart(page: DrawingPage): number | null {
 }
 
 /** y (points) of the underside of the bottom chord and the chord depth: the lowest pair of horizontal lines a lumber depth apart. */
-function bottomChord(page: DrawingPage, scale: number): { baseY: number; depthPts: number; leftX: number } | null {
-  const lines = horizontalLines(page.segments, page.width * 0.9).sort((a, b) => a.y - b.y);
+function bottomChord(page: DrawingPage, scale: number, floor = 0): { baseY: number; depthPts: number; leftX: number; rightX: number } | null {
+  // only the drawing: the tables below it have pairs of lines about a lumber depth apart too. Page borders run edge to edge.
+  const lines = horizontalLines(page.segments, page.width * 0.92).filter((l) => l.y > floor).sort((a, b) => a.y - b.y);
+  // the bottom chord is the longest stripe of two lines a lumber depth apart (a plate outline or a flat top chord is shorter or higher)
+  let best: { baseY: number; depthPts: number; leftX: number; rightX: number; overlap: number } | null = null;
   for (const lo of lines) {
     for (const hi of lines) {
-      if (hi.y <= lo.y) continue;
-      const depth = nearestDepth((hi.y - lo.y) * scale);
-      if (depth === null) continue;
-      const run = lo.runs.find(([a, b]) => hi.runs.some(([c, d]) => Math.min(b, d) - Math.max(a, c) > 20));
-      if (run) return { baseY: lo.y, depthPts: hi.y - lo.y, leftX: run[0] };
+      if (hi.y <= lo.y || nearestDepth((hi.y - lo.y) * scale) === null) continue;
+      for (const [a, b] of lo.runs) {
+        for (const [c, d] of hi.runs) {
+          const overlap = Math.min(b, d) - Math.max(a, c);
+          if (overlap > 20 && (!best || overlap > best.overlap + 1)) best = { baseY: lo.y, depthPts: hi.y - lo.y, leftX: Math.max(a, c), rightX: Math.min(b, d), overlap };
+        }
+      }
     }
   }
-  return null;
+  return best ? { baseY: best.baseY, depthPts: best.depthPts, leftX: best.leftX, rightX: best.rightX } : null;
 }
 
 /** The measured length, or the vertical dimension printed for it when one is within a few tenths of an inch. */
@@ -216,19 +223,32 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
   const vlines = verticalLines(page.segments);
 
   // --- heel of each hung end: the end vertical above the joint number ---
+  // The drawing is above the "TOTAL WEIGHT" line; the tables below repeat the joint letters and the page border is a line.
+  const drawingFloor = page.words.find((w) => /^TOTAL WEIGHT/.test(w.str))?.y ?? 0;
   const heelByJoint: Record<string, number> = {};
-  for (const s of truss.supports.filter(isHungEnd)) {
-    let best = 0;
-    for (const w of page.words.filter((x) => !x.rot && x.str === s.joint)) {
+  const heelLines = verticalLines(page.segments, HEEL_GAP);
+  // a truss hung from both chords at one end: its bottom chord ends square, the top chord carries the end vertical
+  const hungOnTop = truss.supports.some((x) => isHungEnd(x) && x.chord === 'TC');
+  const chordForHeel = bottomChord(page, scale, drawingFloor);
+  for (const s of truss.supports.filter((x) => isHungEnd(x) && !(hungOnTop && x.chord === 'BC'))) {
+    // Verticals starting above the joint number: the longest one within 30 points is the end (a web or a plate
+    // edge is shorter). When the number sits further under the foot of the end, the nearest one within 60.
+    const near: Array<{ gap: number; span: number }> = [];
+    for (const w of page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor)) {
       const jx = w.x + w.w / 2;
-      for (const v of vlines) {
-        if (Math.abs(v.x - jx) > 12) continue;
+      for (const v of heelLines) {
+        if (Math.abs(v.x - jx) > (chordForHeel ? 25 : 12)) continue;
+        // the end of the truss is the end of its bottom chord: a vertical anywhere else is a web or a plate edge
+        if (chordForHeel && Math.abs(v.x - chordForHeel.leftX) > END_TOLERANCE && Math.abs(v.x - chordForHeel.rightX) > END_TOLERANCE) continue;
         for (const [lo, hi] of v.runs) {
-          if (lo >= w.y && lo - w.y <= 30) best = Math.max(best, (hi - lo) * scale);
+          const gap = lo - w.y;
+          if (gap >= 0 && gap <= 60 && (hi - lo) < 400) near.push({ gap, span: (hi - lo) * scale });
         }
       }
     }
-    if (best > 0) heelByJoint[s.joint] = snapToDimension(page, best);
+    const close = near.filter((c) => c.gap <= 30);
+    const pick = close.length > 0 ? close.reduce((a, c) => (c.span > a.span ? c : a)) : near.sort((p, q) => p.gap - q.gap)[0];
+    if (pick && pick.span > 0) heelByJoint[s.joint] = snapToDimension(page, pick.span);
   }
 
   // --- top chord pitch at a hung joint on the top chord: the nearest "4.00 12" label of the drawing ---
@@ -237,7 +257,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
     .map((w) => ({ w, rise: Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]) }))
     .filter((p) => Number.isFinite(p.rise) && !p.w.rot);
   for (const s of truss.supports.filter((x) => isHungEnd(x) && x.chord === 'TC')) {
-    const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > 400 && x.y < 735);
+    const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor && x.y < 735);
     let best: { rise: number; d: number } | null = null;
     for (const j of joints) for (const p of pitches) {
       const d = Math.hypot(j.x - p.w.x, j.y - p.w.y);
@@ -248,7 +268,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
 
   // --- vertical webs: two vertical faces one lumber depth apart, standing on the bottom chord ---
   const webs: VerticalWeb[] = [];
-  const chord = bottomChord(page, scale);
+  const chord = bottomChord(page, scale, drawingFloor);
   // no dimension ticks to read the left bearing from (Canadian sheets): the left end of the bottom chord
   const origin = originX(page) ?? chord?.leftX ?? null;
   if (origin !== null && chord) {
