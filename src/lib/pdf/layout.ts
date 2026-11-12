@@ -15,6 +15,7 @@
 
 import { extractSegments } from './pdfVectors';
 import type { PdfPageLike, Segment } from './pdfVectors';
+import { isHungEnd } from './connections';
 import type { PdfJob } from './types';
 
 export interface LayoutWord {
@@ -268,6 +269,17 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
   const girders = new Map<string, number[]>();
   for (const t of job.trusses) if (t.hangerLoads.length) girders.set(t.label.toUpperCase(), [...new Set(t.hangerLoads.map((h) => h.position))].sort((a, b) => a - b));
 
+  const loadsAt = (girder: string, position: number) =>
+    (job.trusses.find((t) => t.label.toUpperCase() === girder && t.hangerLoads.length > 0)?.hangerLoads ?? [])
+      .filter((h) => Math.abs(h.position - position) <= 0.5)
+      .map((h) => h.load);
+  const fit = (carried: string, loads: number[]) => {
+    const ends = job.trusses.filter((t) => t.label.toUpperCase() === carried).flatMap((t) => t.supports.filter(isHungEnd));
+    let best = Infinity;
+    for (const e of ends) for (const l of loads) best = Math.min(best, Math.abs((e.down as number) - l) / Math.max(l, 1));
+    return best;
+  };
+
   // bars carrying a label
   const labelled = labelWords.map((w) => ({ w, label: baseLabel(w.text).toUpperCase(), bar: barOf(w, plyOf(baseLabel(w.text).toUpperCase())) }));
   const seen = new Set<string>();
@@ -302,11 +314,53 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
     const byLabel = new Map<string, number[]>();
     for (const s of sides) if (s.label) byLabel.set(s.label, [...(byLabel.get(s.label) ?? []), s.b.c]);
 
+    // One mapping from the coordinate along the girder to the printed positions for the whole girder: the bars of
+    // all labels together fix the direction and the origin (a label with one bar alone could be any position).
+    const allAlong = [...new Set([...byLabel.values()].flat().map((c) => Math.round(c * 100) / 100))].sort((a, b) => a - b);
+    // bars of the other girders: the one a girder is hung from is among them
+    const otherGirders = bars.filter((b) => b.thick >= 0.3 && labelled.some((l) => girders.has(l.label) && l.label !== g.label && distBoxToBar(l.w, b) <= reach(14)));
+    const hint = directionHint(job, g.label, gBar, otherGirders);
+    // the label of the bar at each coordinate
+    const labelAt = new Map<number, string>();
+    for (const [label, coords] of byLabel) for (const c of coords) labelAt.set(Math.round(c * 100) / 100, label);
+    let shared: { offset: number; sign: number; hits: number; mismatch: number } | null = null;
+    for (const sign of [1, -1]) {
+      for (const anchor of allAlong) {
+        for (const p0 of expected) {
+          const offset = p0 - sign * anchor * scale;
+          const matched = new Set<number>();
+          let mismatch = 0; // how badly the trusses labelled at those bars fit the loads at the positions they land on
+          for (const a of allAlong) {
+            const p = expected.find((e) => Math.abs(e - (sign * a * scale + offset)) <= SNAP);
+            if (p === undefined) continue;
+            matched.add(p);
+            const fitted = fit(labelAt.get(a) ?? '', loadsAt(g.label, p));
+            mismatch += Number.isFinite(fitted) ? fitted : 1;
+          }
+          // most positions matched wins; then the best fit of the labelled trusses to the loads; then the supports' direction
+          const better =
+            !shared ||
+            matched.size > shared.hits ||
+            (matched.size === shared.hits && mismatch < shared.mismatch - 1e-9) ||
+            (matched.size === shared.hits && Math.abs(mismatch - shared.mismatch) <= 1e-9 && sign === hint && shared.sign !== hint);
+          if (better) shared = { offset, sign, hits: matched.size, mismatch };
+        }
+      }
+    }
+
     for (const [carried, coords] of byLabel) {
       const along = [...new Set(coords.map((c) => Math.round(c * 100) / 100))].sort((a, b) => a - b);
-      // try both directions along the girder; the offset is fixed by pairing the first coordinate with each printed position
       let best: { hits: Array<[number, number]>; offset: number; sign: number } | null = null;
-      for (const sign of [1, -1]) {
+      if (shared) {
+        const hits: Array<[number, number]> = [];
+        for (const a of along) {
+          const p = expected.find((e) => Math.abs(e - (shared!.sign * a * scale + shared!.offset)) <= SNAP);
+          if (p !== undefined) hits.push([a, p]);
+        }
+        if (hits.length > 0) best = { hits, offset: shared.offset, sign: shared.sign };
+      }
+      // this label's bars do not fit the shared mapping: try both directions with its own anchor
+      for (const sign of best ? [] : [1, -1]) {
         for (const p0 of expected) {
           const offset = p0 - sign * along[sign === 1 ? 0 : along.length - 1] * scale;
           const hits: Array<[number, number]> = [];
@@ -353,7 +407,44 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
       break;
     }
   }
-  return { scale, connections, notes };
+  // Several labels came out for one position (labels of the other side of the girder, or of a neighbouring
+  // run, are as near as the right one): keep the truss whose hung-end reaction fits the load on the girder.
+  const resolved: LayoutConnection[] = [];
+  for (const c of connections) {
+    const same = connections.filter((o) => o.girder === c.girder && Math.abs(o.position - c.position) <= 0.5);
+    if (same.length === 1 || resolved.some((r) => r.girder === c.girder && Math.abs(r.position - c.position) <= 0.5)) {
+      if (same.length === 1) resolved.push(c);
+      continue;
+    }
+    const loads = loadsAt(c.girder, c.position);
+    const winner = [...same].sort((p, q) => fit(p.carried, loads) - fit(q.carried, loads))[0];
+    resolved.push(winner);
+  }
+
+  // A second reading by order and spacing (labels that stand for a run of trusses, "T-50(2)") is kept for a
+  // girder when it links every hanger load and explains the loads better than the label-per-bar reading.
+  const mismatchOf = (list: LayoutConnection[], girder: string) => {
+    const mine = list.filter((c) => c.girder === girder);
+    if (mine.length === 0) return Infinity;
+    return mine.reduce((sum, c) => sum + Math.min(1, fit(c.carried, loadsAt(girder, c.position))), 0) / mine.length;
+  };
+  const finalList = [...resolved];
+  const considered = new Set<string>();
+  for (const g of labelled.filter((l) => girders.has(l.label) && l.bar)) {
+    if (considered.has(g.label)) continue;
+    considered.add(g.label);
+    const expected = girders.get(g.label)!;
+    for (const bar of barsOf(g.w, plyOf(g.label))) {
+      const alt = linkBySeries(layout, job, g.label, bar, bars, labelWords, expected, scale);
+      if (alt.length === 0) continue;
+      if (mismatchOf(alt, g.label) + 0.05 < mismatchOf(finalList, g.label)) {
+        for (let i = finalList.length - 1; i >= 0; i--) if (finalList[i].girder === g.label) finalList.splice(i, 1);
+        finalList.push(...alt);
+      }
+      break;
+    }
+  }
+  return { scale, connections: finalList, notes };
 }
 
 /** The run of consecutive bars (sorted along the girder) spaced like the hanger positions, or null. */
@@ -367,6 +458,26 @@ function hangerRun(bars: Bar[], positions: number[], ascending: boolean, scale: 
     if (run.every((b, k) => k === 0 || Math.abs(b.c - run[k - 1].c - want[k - 1]) <= tolerance)) return run;
   }
   return null;
+}
+
+/**
+ * Which way the printed positions run along a girder bar (+1 = with the coordinate), from how the girder is
+ * supported: position 0 is its left bearing. When the left bearing is the end hung from another truss, the
+ * left end is the one touching a bar across it; when it is a wall bearing, the other (free) end. Null when the
+ * sheet or the drawing does not say.
+ */
+function directionHint(job: PdfJob, girder: string, gBar: Bar, supportBars: Bar[]): 1 | -1 | null {
+  const truss = job.trusses.find((t) => t.label.toUpperCase() === girder && t.hangerLoads.length > 0);
+  const left = truss?.supports.find((x) => x.joint === truss.leftJoint);
+  if (!truss || !left) return null;
+  const touches = (end: number) =>
+    supportBars.some((b) => b.axis !== gBar.axis && Math.abs(b.c - end) <= 3 + b.thick / 2 && b.a0 <= gBar.c && b.a1 >= gBar.c);
+  const low = touches(gBar.a0);
+  const high = touches(gBar.a1);
+  if (low === high) return null; // both or neither end rests on a bar
+  const touchingEnd = low ? 'low' : 'high';
+  const leftEnd = isHungEnd(left) ? touchingEnd : touchingEnd === 'low' ? 'high' : 'low';
+  return leftEnd === 'low' ? 1 : -1;
 }
 
 /** "T-5(4)" → 4, "T-4" → 1 */
@@ -443,6 +554,12 @@ function linkBySeries(
       .filter((w) => baseLabel(w.text).toUpperCase() !== girder)
       .filter((w) => (sideName === 'before' ? acrossOf(w) < gBar.c : acrossOf(w) > gBar.c))
       .filter((w) => alongOf(w) >= ordered[0].c - margin && alongOf(w) <= ordered[ordered.length - 1].c + margin)
+      // a label of one of these trusses lies on its bar; one past the far end of every bar belongs to something else
+      .filter((w) => {
+        const box = wordBox(w);
+        const [lo, hi] = gBar.axis === 'h' ? [box.y0, box.y1] : [box.x0, box.x1];
+        return lo >= Math.min(...ordered.map((b) => b.a0)) - 1 && hi <= Math.max(...ordered.map((b) => b.a1)) + 1;
+      })
       .sort((p, q) => alongOf(p) - alongOf(q));
     // labels of other trusses sit among them: the stretch of labels whose quantities add up to the bars, nearest the bars
     const middle = (ordered[0].c + ordered[ordered.length - 1].c) / 2;
