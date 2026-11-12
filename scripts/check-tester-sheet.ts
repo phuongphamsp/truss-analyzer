@@ -8,7 +8,10 @@
  * Run (from the repo root, node 20):
  *   npx esbuild scripts/check-tester-sheet.ts --bundle --platform=node --format=esm --packages=external \
  *     --outfile=node_modules/.cache/check-tester-sheet.mjs
- *   node node_modules/.cache/check-tester-sheet.mjs "<engineering .pdf>" "<layout .pdf>" "<tester .xlsx>" [can|us]
+ *   node node_modules/.cache/check-tester-sheet.mjs "<engineering .pdf>" "<layout .pdf>" "<tester .xlsx>" [can|us] [sample filter]
+ *
+ * One workbook can hold several samples: the optional filter keeps the rows whose "Sample / job name"
+ * contains it (e.g. "Sample 7"). A row may list several positions ("124.8, 148.8") for identical connections.
  */
 
 import fs from 'node:fs';
@@ -18,7 +21,7 @@ import { attachGeometry, extractPdfPages, linkLayout, parsePdfJob, pdfToGirderGr
 import { buildSSTPayload, getCarriedSpecies, getGirderSpecies } from '../src/lib/sst-mapper';
 import type { SSTRegion } from '../src/lib/sst-types';
 
-const [engFile, layoutFile, sheetFile, regionArg] = process.argv.slice(2);
+const [engFile, layoutFile, sheetFile, regionArg, sampleFilter] = process.argv.slice(2);
 if (!engFile || !layoutFile || !sheetFile) {
   console.error('usage: check-tester-sheet <engineering pdf> <layout pdf> <tester xlsx> [can|us]');
   process.exit(1);
@@ -55,8 +58,14 @@ async function main() {
   for (const row of rows) {
     if (String(row['Sample / job name'] ?? '').startsWith('EXAMPLE') || !row['Girder (carrying)']) continue;
     const girder = String(row['Girder (carrying)']).toUpperCase();
-    const position = num(row['Position on girder (in, from left bearing)']);
+    if (sampleFilter && !String(row['Sample / job name'] ?? '').includes(sampleFilter)) continue;
     const carried = String(row['Carried truss']).toUpperCase();
+    const positions = String(row['Position on girder (in, from left bearing)'] ?? '')
+      .split(',')
+      .map((v) => Number(v.trim()))
+      .filter((v) => v.toString().trim() !== '' && Number.isFinite(v));
+    if (positions.length === 0) continue;
+    for (const position of positions) {
     const tag = `${girder} @${position} ${carried}`;
     const g = groups.find((x) => x.girder.label.toUpperCase() === girder);
     const c = g?.carriedTrusses.find((x) => position !== null && Math.abs((x.localX ?? 0) - position) <= 0.5);
@@ -86,6 +95,11 @@ async function main() {
     check(`${tag} uplift`, near(cm.loads.uplift, num(row['Uplift (lb)']), 1), `PDF ${cm.loads.uplift}`);
     check(`${tag} skew`, near(cm.angle.skewAngle, num(row['Skew (deg)']), 0.5), `PDF ${cm.angle.skewAngle}`);
     check(`${tag} slope`, near(cm.angle.slopeAngle, num(row['Slope (deg)']), 0.5), `PDF ${cm.angle.slopeAngle}`);
+    // uplift duration, when the tester named one ("Short Term (1.15)" / "Standard Term (1.00)")
+    const note = String(row['Uplift duration'] ?? row['Uplift load case / note'] ?? '');
+    const factor = note.match(/\((\d\.\d\d)\)/)?.[1];
+    if (factor) check(`${tag} uplift duration`, p.designInformations.upliftLoadDurationType === Math.round(Number(factor) * 100), `PDF ${p.designInformations.upliftLoadDurationType}, tester ${note}`);
+    }
   }
   console.log(`\nResult (${region.toUpperCase()}): ${pass} fields matched, ${fail} mismatched`);
 }
