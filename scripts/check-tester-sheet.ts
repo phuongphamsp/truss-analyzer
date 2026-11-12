@@ -62,13 +62,17 @@ async function main() {
     const carried = String(row['Carried truss']).toUpperCase();
     const positions = String(row['Position on girder (in, from left bearing)'] ?? '')
       .split(',')
-      .map((v) => Number(v.trim()))
-      .filter((v) => v.toString().trim() !== '' && Number.isFinite(v));
+      .map((v) => v.trim())
+      .filter((v) => v !== '' && Number.isFinite(Number(v)))
+      .map(Number);
     if (positions.length === 0) continue;
     for (const position of positions) {
     const tag = `${girder} @${position} ${carried}`;
     const g = groups.find((x) => x.girder.label.toUpperCase() === girder);
-    const c = g?.carriedTrusses.find((x) => position !== null && Math.abs((x.localX ?? 0) - position) <= 0.5);
+    // a position can hold two connections (a load on the top chord and one on the bottom chord): take the one whose load is nearest the tester's
+    const here = (g?.carriedTrusses ?? []).filter((x) => Math.abs((x.localX ?? 0) - position) <= 0.5);
+    const wanted = num(row['Download (lb)']);
+    const c = here.sort((p, q) => Math.abs((p.downReaction ?? 0) - (wanted ?? 0)) - Math.abs((q.downReaction ?? 0) - (wanted ?? 0)))[0];
     console.log(tag);
     check(`${tag} found`, !!g && !!c, g ? 'no connection at this position' : 'girder not found in the PDF');
     if (!g || !c) continue;
