@@ -27,6 +27,8 @@ export interface LayoutWord {
   /** font size */
   h: number;
   rotated: boolean;
+  /** direction of the text in radians (0 = left to right, PI/2 = bottom to top) */
+  angle?: number;
 }
 
 export interface LayoutPage {
@@ -52,9 +54,54 @@ export async function readLayoutPage(page: LayoutPageSource, OPS: Record<string,
       w: it.width ?? 0,
       h: Math.hypot(a, b),
       rotated: Math.abs(b) > Math.abs(a),
+      angle: Math.atan2(b, a),
     });
   }
-  return { words, segments: await extractSegments(page, OPS) };
+  return { words: joinLetters(words), segments: await extractSegments(page, OPS) };
+}
+
+/**
+ * Some layouts write a label letter by letter ("A", "0", "1", "-", "G" as separate text items), upright, turned
+ * or at any angle. Items with the same direction that lie on one line and follow each other with less than a
+ * third of a letter's height between them are one word.
+ */
+export function joinLetters(words: LayoutWord[]): LayoutWord[] {
+  const out: LayoutWord[] = [];
+  const angleOf = (w: LayoutWord) => w.angle ?? (w.rotated ? Math.PI / 2 : 0);
+  // items of one direction (within 1.5 degrees)
+  const groups: LayoutWord[][] = [];
+  for (const w of [...words].sort((p, q) => angleOf(p) - angleOf(q))) {
+    const last = groups[groups.length - 1];
+    if (last && Math.abs(angleOf(w) - angleOf(last[0])) < (1.5 * Math.PI) / 180) last.push(w);
+    else groups.push([w]);
+  }
+  for (const group of groups) {
+    const theta = angleOf(group[0]);
+    const [cos, sin] = [Math.cos(theta), Math.sin(theta)];
+    const along = (w: LayoutWord) => w.x * cos + w.y * sin;
+    const across = (w: LayoutWord) => -w.x * sin + w.y * cos;
+    // one line: the same position across the direction of the text
+    const lines: LayoutWord[][] = [];
+    for (const w of [...group].sort((p, q) => across(p) - across(q))) {
+      const last = lines[lines.length - 1];
+      if (last && Math.abs(across(w) - across(last[0])) <= 0.6) last.push(w);
+      else lines.push([w]);
+    }
+    for (const line of lines) {
+      let cur: LayoutWord | null = null;
+      for (const w of [...line].sort((p, q) => along(p) - along(q))) {
+        const gap: number = cur ? along(w) - (along(cur) + cur.w) : Infinity;
+        if (cur && gap <= cur.h * 0.35 && gap >= -cur.h * 0.5 && Math.abs(w.h - cur.h) < 0.5) {
+          cur = { ...cur, text: cur.text + w.text, w: along(w) + w.w - along(cur) };
+        } else {
+          if (cur) out.push(cur);
+          cur = w;
+        }
+      }
+      if (cur) out.push(cur);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +277,8 @@ function distBoxToBar(w: LayoutWord, b: Bar): number {
   return Math.hypot(dx, dy);
 }
 
-const baseLabel = (text: string) => text.replace(/\(\d+\)$/, '');
+// a series label can be followed by a note ("C04(6)24"O.C."): the label and the count are read from the start
+const baseLabel = (text: string) => text.replace(/\(\d+\).*$/, '');
 const CONNECTOR = /^[A-Z]{2,4}\d+[A-Z0-9-]*$/;
 const SPACING_TOLERANCE = 2.5; // inches: a bar may be this far from where the printed hanger spacing puts it
 const REFERENCE_SCALE = 1.86; // inches per point of the layout the label distances were tuned on
@@ -448,16 +496,17 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
 }
 
 /** The run of consecutive bars (sorted along the girder) spaced like the hanger positions, or null. */
-function hangerRun(bars: Bar[], positions: number[], ascending: boolean, scale: number): Bar[] | null {
+function hangerRuns(bars: Bar[], positions: number[], ascending: boolean, scale: number): Bar[][] {
   const n = positions.length;
   const gaps = positions.slice(1).map((p, i) => (p - positions[i]) / scale); // points, left end first
   const want = ascending ? gaps : [...gaps].reverse(); // bars are sorted by coordinate
+  const runs: Bar[][] = [];
   for (let i = 0; i + n <= bars.length; i++) {
     const run = bars.slice(i, i + n);
     const tolerance = SPACING_TOLERANCE / scale;
-    if (run.every((b, k) => k === 0 || Math.abs(b.c - run[k - 1].c - want[k - 1]) <= tolerance)) return run;
+    if (run.every((b, k) => k === 0 || Math.abs(b.c - run[k - 1].c - want[k - 1]) <= tolerance)) runs.push(run);
   }
-  return null;
+  return runs;
 }
 
 /**
@@ -481,7 +530,7 @@ function directionHint(job: PdfJob, girder: string, gBar: Bar, supportBars: Bar[
 }
 
 /** "T-5(4)" → 4, "T-4" → 1 */
-const seriesSize = (text: string) => Number(text.match(/\((\d+)\)$/)?.[1] ?? 1);
+const seriesSize = (text: string) => Number(text.match(/^[^()]*\((\d+)\)/)?.[1] ?? 1);
 
 /**
  * Trusses hung on a girder when runs of identical trusses are labelled once.
@@ -546,38 +595,45 @@ function linkBySeries(
   for (const sideName of ['before', 'after'] as const) {
     const onSide = attached.filter((b) => (sideName === 'before' ? b.a0 < gBar.c - 3 : b.a1 > gBar.c + 3));
     const directions = haveEnds ? [left! <= right!] : [true, false];
-    const found = directions.map((d) => ({ ascending: d, run: hangerRun(onSide, positions, d, scale) })).find((x) => x.run);
-    if (!found) continue;
-    const ascending = found.ascending;
-    const ordered = found.run!;
-    const beside = labelWords
-      .filter((w) => baseLabel(w.text).toUpperCase() !== girder)
-      .filter((w) => (sideName === 'before' ? acrossOf(w) < gBar.c : acrossOf(w) > gBar.c))
-      .filter((w) => alongOf(w) >= ordered[0].c - margin && alongOf(w) <= ordered[ordered.length - 1].c + margin)
-      // a label of one of these trusses lies on its bar; one past the far end of every bar belongs to something else
-      .filter((w) => {
-        const box = wordBox(w);
-        const [lo, hi] = gBar.axis === 'h' ? [box.y0, box.y1] : [box.x0, box.x1];
-        return lo >= Math.min(...ordered.map((b) => b.a0)) - 1 && hi <= Math.max(...ordered.map((b) => b.a1)) + 1;
-      })
-      .sort((p, q) => alongOf(p) - alongOf(q));
-    // labels of other trusses sit among them: the stretch of labels whose quantities add up to the bars, nearest the bars
-    const middle = (ordered[0].c + ordered[ordered.length - 1].c) / 2;
-    let chosen: LayoutWord[] | null = null;
-    let chosenOff = Infinity;
-    for (let a = 0; a < beside.length; a++) {
-      for (let b = a; b < beside.length; b++) {
-        const window = beside.slice(a, b + 1);
-        if (window.reduce((n, w) => n + seriesSize(w.text), 0) !== ordered.length) continue;
-        const off = Math.abs((alongOf(window[0]) + alongOf(window[window.length - 1])) / 2 - middle);
-        if (off < chosenOff) {
-          chosen = window;
-          chosenOff = off;
+    // With a uniform spacing every run of that many bars fits the positions: the labels decide which run it is
+    let best: { cost: number; ascending: boolean; ordered: Bar[]; chosen: LayoutWord[] } | null = null;
+    for (const ascending of directions) {
+      for (const ordered of hangerRuns(onSide, positions, ascending, scale)) {
+        const beside = labelWords
+          .filter((w) => baseLabel(w.text).toUpperCase() !== girder)
+          .filter((w) => (sideName === 'before' ? acrossOf(w) < gBar.c : acrossOf(w) > gBar.c))
+          .filter((w) => alongOf(w) >= ordered[0].c - margin && alongOf(w) <= ordered[ordered.length - 1].c + margin)
+          // the name of a truss is written along its bar; text across the bars is the name of a truss running the
+          // other way, except a run label ("C04(6)") which stands between the bars it counts
+          .filter((w) => seriesSize(w.text) > 1 || w.rotated === (gBar.axis === 'h'))
+          // a label of one of these trusses lies on its bar; one past the far end of every bar belongs to something else
+          .filter((w) => {
+            const box = wordBox(w);
+            const [lo, hi] = gBar.axis === 'h' ? [box.y0, box.y1] : [box.x0, box.x1];
+            return lo >= Math.min(...ordered.map((x) => x.a0)) - 1 && hi <= Math.max(...ordered.map((x) => x.a1)) + 1;
+          })
+          .sort((p, q) => alongOf(p) - alongOf(q));
+        // Labels of other trusses sit among them: take the stretch of labels whose quantities add up to the bars and
+        // whose labels sit best on the bars they stand for (a plain label at its own bar, a run label at the middle
+        // of the bars it counts).
+        for (let i0 = 0; i0 < beside.length; i0++) {
+          for (let i1 = i0; i1 < beside.length; i1++) {
+            const window = beside.slice(i0, i1 + 1);
+            if (window.reduce((n, w) => n + seriesSize(w.text), 0) !== ordered.length) continue;
+            let first = 0;
+            let cost = 0;
+            for (const w of window) {
+              const covered = ordered.slice(first, first + seriesSize(w.text));
+              cost += Math.abs(alongOf(w) - covered.reduce((sum, bar) => sum + bar.c, 0) / covered.length);
+              first += covered.length;
+            }
+            if (!best || cost < best.cost) best = { cost, ascending, ordered, chosen: window };
+          }
         }
       }
     }
-    if (!chosen) continue;
-    const sequence = ascending ? chosen : [...chosen].reverse();
+    if (!best) continue;
+    const sequence = best.ascending ? best.chosen : [...best.chosen].reverse();
 
     const out: LayoutConnection[] = [];
     let i = 0;

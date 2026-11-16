@@ -224,6 +224,9 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
 
   // --- heel of each hung end: the end vertical above the joint number ---
   // The drawing is above the "TOTAL WEIGHT" line; the tables below repeat the joint letters and the page border is a line.
+  // the drawing ends under the scale note (the sheet can be taller than letter)
+  const scaleNote = page.words.find((w) => /^Scale\s*[:=]/.test(w.str));
+  const drawingTop = scaleNote ? scaleNote.y + 15 : 735;
   const drawingFloor = page.words.find((w) => /^TOTAL WEIGHT/.test(w.str))?.y ?? 0;
   const heelByJoint: Record<string, number> = {};
   const heelLines = verticalLines(page.segments, HEEL_GAP);
@@ -257,13 +260,16 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
     .map((w) => ({ w, rise: Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]) }))
     .filter((p) => Number.isFinite(p.rise) && !p.w.rot);
   for (const s of truss.supports.filter((x) => isHungEnd(x) && x.chord === 'TC')) {
-    const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor && x.y < 735);
+    const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor && x.y < drawingTop);
     let best: { rise: number; d: number } | null = null;
     for (const j of joints) for (const p of pitches) {
       const d = Math.hypot(j.x - p.w.x, j.y - p.w.y);
       if (!best || d < best.d) best = { rise: p.rise, d };
     }
-    if (best) slopeByJoint[s.joint] = (Math.atan(best.rise / 12) * 180) / Math.PI;
+    // the joint letter is not always a text item of its own: with one pitch on the sheet there is no doubt
+    const rises = [...new Set(pitches.map((p) => p.rise))];
+    const rise = best?.rise ?? (rises.length === 1 ? rises[0] : null);
+    if (rise !== null) slopeByJoint[s.joint] = (Math.atan(rise / 12) * 180) / Math.PI;
   }
 
   // --- vertical webs: two vertical faces one lumber depth apart, standing on the bottom chord ---
