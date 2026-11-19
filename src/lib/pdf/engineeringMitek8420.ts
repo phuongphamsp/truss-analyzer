@@ -43,9 +43,9 @@ const CHORD_PIECE = new RegExp(`(?:^|\\s)(${J})-\\s*(${J})\\s+-?\\d+\\s*\\/\\s*-
 const PAIR = '(-?\\d+)\\s*\\/\\s*(-?\\d+)';
 const COMPONENT_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(?:-?\\d+|---)\\s+${[1, 2, 3, 4, 5, 6].map(() => PAIR).join('\\s+')}`);
 
-/** Per joint, which component gives the largest uplift: wind, or one of the others (snow, live, dead ...). */
-function readUpliftSources(lines: string[]): Map<string, 'wind' | 'other' | null> {
-  const out = new Map<string, 'wind' | 'other' | null>();
+/** Per joint, the uplift load duration: standard term when snow or dead pulls up (negative minimum), else short term. */
+function readUpliftSources(lines: string[]): Map<string, 'standard' | 'short' | null> {
+  const out = new Map<string, 'standard' | 'short' | null>();
   const header = lines.findIndex((l) => /JT\s+COMBINED\s+SNOW\s+LIVE\s+PERM\.LIVE\s+WIND\s+DEAD\s+SOIL/.test(l));
   if (header < 0) return out;
   for (let i = header + 1; i < lines.length; i++) {
@@ -53,8 +53,8 @@ function readUpliftSources(lines: string[]): Map<string, 'wind' | 'other' | null
     if (!m || out.has(m[1])) continue;
     // minimum of each component: snow, live, permanent live, wind, dead, soil
     const mins = [3, 5, 7, 9, 11, 13].map((k) => Number(m[k]));
-    const lowest = Math.min(...mins);
-    out.set(m[1], lowest < 0 ? (mins.indexOf(lowest) === 3 ? 'wind' : 'other') : null);
+    const [snow, , , , dead] = mins;
+    out.set(m[1], Math.min(...mins) < 0 ? (snow < 0 || dead < 0 ? 'standard' : 'short') : null);
   }
   return out;
 }

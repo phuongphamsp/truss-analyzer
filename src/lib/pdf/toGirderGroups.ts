@@ -179,8 +179,9 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
             : undefined,
         downReaction: support?.down ?? h.load,
         upliftReaction: support?.uplift ?? 0,
-        // Canadian sheets: where the factored uplift is not zero, wind uplift is short term (1.15), snow / live / dead uplift standard term (1.00)
-        upliftDolFactor: !support?.uplift ? undefined : support.upliftSource === 'wind' ? 1.15 : support.upliftSource === 'other' ? 1.0 : undefined,
+        // Canadian sheets (tester rule): with no factored uplift the default stays (short term, 1.15); with uplift, a snow or
+        // dead load pulling up in the unfactored reactions is standard term (1.00), any other uplift short term (1.15)
+        upliftDolFactor: !support?.uplift ? undefined : support.upliftSource === 'standard' ? 1.0 : support.upliftSource === 'short' ? 1.15 : undefined,
         bearingSide: 'right',
       };
     });

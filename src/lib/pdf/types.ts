@@ -30,8 +30,12 @@ export interface PdfSupport {
   upliftLoadCase: number | null;
   /** chord the joint lies on, when the sheet names chords by joints (Canadian format) */
   chord?: 'TC' | 'BC' | null;
-  /** which load produces the largest uplift at this joint, from the unfactored component reactions (wind, or snow / live / dead) */
-  upliftSource?: 'wind' | 'other' | null;
+  /**
+   * Uplift load duration of the joint, from the unfactored component reactions (tester rule): a snow or a dead load
+   * with a negative minimum (it pulls the joint up) is 'standard' (1.00); any other uplift is 'short' (1.15);
+   * null when the joint has no negative component. Only used where the factored UPLIFT column is not zero.
+   */
+  upliftSource?: 'standard' | 'short' | null;
 }
 
 export interface PdfHangerLoad {
