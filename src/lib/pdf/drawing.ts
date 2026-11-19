@@ -171,23 +171,26 @@ function firstDimensionStart(page: DrawingPage): number | null {
 }
 
 /** y (points) of the underside of the bottom chord and the chord depth: the lowest pair of horizontal lines a lumber depth apart. */
-function bottomChord(page: DrawingPage, scale: number, floor = 0): { baseY: number; depthPts: number; leftX: number; rightX: number } | null {
+function bottomChord(page: DrawingPage, scale: number, floor = 0): { baseY: number; depthPts: number; leftX: number; rightX: number; ends: number[] } | null {
   // only the drawing: the tables below it have pairs of lines about a lumber depth apart too. Page borders run edge to edge.
   const lines = horizontalLines(page.segments, page.width * 0.92).filter((l) => l.y > floor).sort((a, b) => a.y - b.y);
   // the bottom chord is the longest stripe of two lines a lumber depth apart (a plate outline or a flat top chord is shorter or higher)
   let best: { baseY: number; depthPts: number; leftX: number; rightX: number; overlap: number } | null = null;
+  // a bottom chord that steps up or down is drawn as several stripes: each has its own ends
+  const ends: number[] = [];
   for (const lo of lines) {
     for (const hi of lines) {
       if (hi.y <= lo.y || nearestDepth((hi.y - lo.y) * scale) === null) continue;
       for (const [a, b] of lo.runs) {
         for (const [c, d] of hi.runs) {
           const overlap = Math.min(b, d) - Math.max(a, c);
+          if (overlap > 20) ends.push(a, b, c, d);
           if (overlap > 20 && (!best || overlap > best.overlap + 1)) best = { baseY: lo.y, depthPts: hi.y - lo.y, leftX: Math.max(a, c), rightX: Math.min(b, d), overlap };
         }
       }
     }
   }
-  return best ? { baseY: best.baseY, depthPts: best.depthPts, leftX: best.leftX, rightX: best.rightX } : null;
+  return best ? { baseY: best.baseY, depthPts: best.depthPts, leftX: best.leftX, rightX: best.rightX, ends } : null;
 }
 
 /** The measured length, or the vertical dimension printed for it when one is within a few tenths of an inch. */
@@ -237,20 +240,33 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
     // Verticals starting above the joint number: the longest one within 30 points is the end (a web or a plate
     // edge is shorter). When the number sits further under the foot of the end, the nearest one within 60.
     const near: Array<{ gap: number; span: number }> = [];
+    const above: Array<{ gap: number; span: number }> = []; // the number sits over the end vertical (beside a stepped chord)
     for (const w of page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor)) {
       const jx = w.x + w.w / 2;
       for (const v of heelLines) {
         if (Math.abs(v.x - jx) > (chordForHeel ? 25 : 12)) continue;
         // the end of the truss is the end of its bottom chord: a vertical anywhere else is a web or a plate edge
-        if (chordForHeel && Math.abs(v.x - chordForHeel.leftX) > END_TOLERANCE && Math.abs(v.x - chordForHeel.rightX) > END_TOLERANCE) continue;
+        if (chordForHeel && !chordForHeel.ends.some((e) => Math.abs(v.x - e) <= END_TOLERANCE)) continue;
         for (const [lo, hi] of v.runs) {
           const gap = lo - w.y;
           if (gap >= 0 && gap <= 60 && (hi - lo) < 400) near.push({ gap, span: (hi - lo) * scale });
+          else if (gap < 0 && w.y - hi <= 30 && (hi - lo) < 400) above.push({ gap: Math.max(0, w.y - hi), span: (hi - lo) * scale });
         }
       }
     }
+    if (near.length === 0) near.push(...above);
     const close = near.filter((c) => c.gap <= 30);
-    const pick = close.length > 0 ? close.reduce((a, c) => (c.span > a.span ? c : a)) : near.sort((p, q) => p.gap - q.gap)[0];
+    // a vertical whose length is printed as a vertical dimension of the sheet is the end; else the longest one
+    const printedAs = (span: number) =>
+      page.words.some((w) => {
+        // feet-inches-sixteenths, or under a foot inches-sixteenths ("3-8")
+        const two = w.str.match(/^(\d+)-(\d+)$/);
+        const v = w.rot ? (two ? Number(two[1]) + Number(two[2]) / 16 : fisToInches(w.str)) : null;
+        return v !== null && Math.abs(v - span) <= 0.1;
+      });
+    const confirmed = close.filter((c) => printedAs(c.span));
+    const pool = confirmed.length > 0 && confirmed.length < close.length ? confirmed : close;
+    const pick = pool.length > 0 ? pool.reduce((a, c) => (c.span > a.span ? c : a)) : near.sort((p, q) => p.gap - q.gap)[0];
     if (pick && pick.span > 0) heelByJoint[s.joint] = snapToDimension(page, pick.span);
   }
 

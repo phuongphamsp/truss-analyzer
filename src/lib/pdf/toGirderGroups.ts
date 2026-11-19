@@ -26,7 +26,7 @@ const ACTUAL: Record<string, [number, number]> = {
 };
 
 /** inches: faces read from a drawing are good to about a tenth of an inch */
-const FACE_SLACK = 0.1;
+const FACE_SLACK = 0.05;
 
 const specString = (s: PdfLumberSpec | null) => (s ? `${s.size} ${s.grade} ${s.species}` : '');
 
