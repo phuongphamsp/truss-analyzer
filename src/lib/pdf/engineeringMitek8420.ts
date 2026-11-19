@@ -41,7 +41,7 @@ const CHORD_PIECE = new RegExp(`(?:^|\\s)(${J})-\\s*(${J})\\s+-?\\d+\\s*\\/\\s*-
 
 // UNFACTORED REACTIONS:  JT  COMBINED  SNOW  LIVE  PERM.LIVE  WIND  DEAD  SOIL, each "max / min"
 const PAIR = '(-?\\d+)\\s*\\/\\s*(-?\\d+)';
-const COMPONENT_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(?:\\d+|---)\\s+${[1, 2, 3, 4, 5, 6].map(() => PAIR).join('\\s+')}`);
+const COMPONENT_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(?:-?\\d+|---)\\s+${[1, 2, 3, 4, 5, 6].map(() => PAIR).join('\\s+')}`);
 
 /** Per joint, which component gives the largest uplift: wind, or one of the others (snow, live, dead ...). */
 function readUpliftSources(lines: string[]): Map<string, 'wind' | 'other' | null> {

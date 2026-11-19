@@ -46,6 +46,15 @@ function bearingInches(bearing: string | null): number | null {
 /** A support is a hung end (hanger or girder ply) rather than a wall bearing. */
 export function isHungEnd(s: PdfSupport): boolean {
   if (s.down === null || s.down <= 0) return false;
+  return hungBearing(s);
+}
+
+/** A hung end that only pulls (the cantilever end of a hip jack): its reaction is uplift, nothing pushes down. */
+export function isUpliftHungEnd(s: PdfSupport): boolean {
+  return (s.down ?? 0) <= 0 && (s.uplift ?? 0) < 0 && hungBearing(s);
+}
+
+function hungBearing(s: PdfSupport): boolean {
   if (!s.bearing) return false;
   if (/^mechanical$/i.test(s.bearing)) return true;
   const w = bearingInches(s.bearing);

@@ -355,7 +355,7 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
     // bars at right angles that cross or end on this girder bar
     const attached = bars.filter((b) => {
       if (b.axis === gBar.axis || b.thick < 0.3) return false;
-      const onGirder = b.c >= gBar.a0 - 1 && b.c <= gBar.a1 + 1; // its centre line lies along the girder
+      const onGirder = b.c >= gBar.a0 - 0.3 && b.c <= gBar.a1 + 0.3; // its centre line lies along the girder (a bar past the end is what the girder rests on)
       const reach = 1.5 + gBar.thick / 2; // a bar ends on the face of the girder, not on its centre line
       const reaches = b.a0 - reach <= gBar.c && b.a1 + reach >= gBar.c; // it crosses or ends on the girder
       return onGirder && reaches;
@@ -368,9 +368,12 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
       let best: { label: string; d: number } | null = null;
       for (const l of labelled) {
         if (l.label === g.label) continue;
-        if (crosses && distBoxToBar(l.w, gBar) > reach(14)) continue;
-        const d = distBoxToBar(l.w, b);
-        if (d <= reach(crosses ? 8 : 12) && (!best || d < best.d)) best = { label: l.label, d };
+        const owns = l.bar === b && seriesSize(l.w.text) === 1; // the label sits at this very bar (a run label stands among many)
+        // a label that belongs to another bar along the girder (the next truss over) does not name a bar across it
+        if (!owns && l.bar && l.bar !== gBar && l.bar.axis === gBar.axis) continue;
+        if (crosses && !owns && distBoxToBar(l.w, gBar) > reach(14)) continue;
+        const d = owns ? 0 : distBoxToBar(l.w, b);
+        if ((owns || d <= reach(crosses ? 8 : 12)) && (!best || d < best.d)) best = { label: l.label, d };
       }
       return { b, label: best?.label ?? null };
     });
@@ -423,7 +426,8 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
         if (hits.length > 0) best = { hits, offset: shared.offset, sign: shared.sign };
       }
       // this label's bars do not fit the shared mapping: try both directions with its own anchor
-      for (const sign of best ? [] : [1, -1]) {
+      // (one bar alone fits any position: next to a mapping fixed by other labels it is a bar that is no hanger)
+      for (const sign of best || (shared && along.length === 1) ? [] : [1, -1]) {
         for (const p0 of expected) {
           const offset = p0 - sign * along[sign === 1 ? 0 : along.length - 1] * scale;
           const hits: Array<[number, number]> = [];
@@ -436,7 +440,8 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
         }
       }
       if (!best || best.hits.length === 0) {
-        notes.push(`${g.label}: ${carried} ends on the girder but its spacing does not match the printed hanger positions.`);
+        // a single bar beside a mapping fixed by other labels is not a hanger: nothing to report
+        if (!(shared && along.length === 1)) notes.push(`${g.label}: ${carried} ends on the girder but its spacing does not match the printed hanger positions.`);
         continue;
       }
       for (const [a, p] of best.hits) {
@@ -505,6 +510,49 @@ export function linkLayout(layout: LayoutPage, job: PdfJob): LayoutLinks {
         finalList.push(...alt);
       }
       break;
+    }
+  }
+
+  // A truss drawn at an angle (a hip or a valley truss) is no bar along an axis, and its label is written along it.
+  // It lands on the girder bar its line crosses; no spacing can be read from it, so it takes the hanger load of that
+  // girder that is still without a truss and that its reaction fits best.
+  const girdersWithBar = labelled.filter((l) => girders.has(l.label) && l.bar);
+  const angledWords = labelWords.filter((w) => w.angle !== undefined && Math.abs(Math.sin(2 * w.angle)) > 0.1);
+  const free = (girder: string) => girders.get(girder)!.filter((p) => !finalList.some((c) => c.girder === girder && Math.abs(c.position - p) <= 0.5));
+  const landings = new Map<string, LayoutWord[]>();
+  for (const w of angledWords) {
+    const carried = baseLabel(w.text).toUpperCase();
+    const dir = { x: Math.cos(w.angle as number), y: Math.sin(w.angle as number) };
+    let best: { girder: string; d: number } | null = null;
+    for (const s of layout.segments) {
+      if (segLen(s) < BAR_MIN_LENGTH) continue;
+      const sx = (s.x2 - s.x1) / segLen(s);
+      const sy = (s.y2 - s.y1) / segLen(s);
+      if (Math.abs(sx * dir.y - sy * dir.x) > 0.05) continue; // not along the text
+      if (Math.abs((w.x - s.x1) * sy - (w.y - s.y1) * sx) > reach(8)) continue; // not next to the label
+      for (const g of girdersWithBar) {
+        if (g.label === carried || free(g.label).length === 0) continue;
+        const gb = g.bar!;
+        // where the line of the segment meets the centre line of the girder
+        const t = gb.axis === 'h' ? (gb.c - s.y1) / (s.y2 - s.y1) : (gb.c - s.x1) / (s.x2 - s.x1);
+        if (!Number.isFinite(t) || t < -0.02 || t > 1.02) continue;
+        const px = s.x1 + t * (s.x2 - s.x1);
+        const py = s.y1 + t * (s.y2 - s.y1);
+        const along = gb.axis === 'h' ? px : py;
+        if (along < gb.a0 - 1 || along > gb.a1 + 1) continue;
+        const d = Math.hypot(px - w.x, py - w.y);
+        if (d <= reach(120) && (!best || d < best.d)) best = { girder: g.label, d };
+      }
+    }
+    if (best) landings.set(best.girder, [...(landings.get(best.girder) ?? []), w]);
+  }
+  for (const [girder, words] of landings) {
+    for (const w of words) {
+      const carried = baseLabel(w.text).toUpperCase();
+      const open = free(girder);
+      if (open.length === 0) break;
+      const position = [...open].sort((p, q) => fit(carried, loadsAt(girder, p), true) - fit(carried, loadsAt(girder, q), true))[0];
+      finalList.push({ girder, carried, position, connector: null });
     }
   }
   return { scale, connections: finalList, notes };

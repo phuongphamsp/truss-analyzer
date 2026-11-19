@@ -14,7 +14,7 @@
 import { fisToInches } from './pdfText';
 import { segmentLength, type PdfPageLike, type Segment } from './pdfVectors';
 import type { PdfJob, PdfTruss, TrussGeometry, VerticalWeb } from './types';
-import { isHungEnd } from './connections';
+import { isHungEnd, isUpliftHungEnd } from './connections';
 
 export interface DrawingWord {
   str: string;
@@ -259,7 +259,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
   const pitches = page.words
     .map((w) => ({ w, rise: Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]) }))
     .filter((p) => Number.isFinite(p.rise) && !p.w.rot);
-  for (const s of truss.supports.filter((x) => isHungEnd(x) && x.chord === 'TC')) {
+  for (const s of truss.supports.filter((x) => (isHungEnd(x) || isUpliftHungEnd(x)) && x.chord === 'TC')) {
     const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor && x.y < drawingTop);
     let best: { rise: number; d: number } | null = null;
     for (const j of joints) for (const p of pitches) {

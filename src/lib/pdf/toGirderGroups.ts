@@ -11,7 +11,7 @@
  */
 
 import type { CarriedTruss, GirderGroup, TreData, TrussInstance } from '../../types';
-import { isHungEnd } from './connections';
+import { isHungEnd, isUpliftHungEnd } from './connections';
 import type { LayoutLinks } from './layout';
 import type { PdfJob, PdfLumberSpec, PdfSupport, PdfTruss } from './types';
 
@@ -98,7 +98,9 @@ function treDataFor(t: PdfTruss, hangers: NonNullable<TreData['hangers']>): TreD
 function hungSupport(t: PdfTruss, load: number, chord: 'TC' | 'BC' | null): PdfSupport | null {
   const ends = t.supports.filter(isHungEnd);
   const sameChord = chord ? ends.filter((s) => s.chord === chord) : [];
-  const pool = sameChord.length > 0 ? sameChord : ends;
+  // no end on that chord pushes down: a hung end on it that only pulls (a hip jack) is the one the load comes from
+  const pulling = sameChord.length === 0 && chord ? t.supports.filter((s) => isUpliftHungEnd(s) && s.chord === chord) : [];
+  const pool = sameChord.length > 0 ? sameChord : pulling.length > 0 ? pulling : ends;
   if (pool.length === 0) return null;
   return pool.reduce((best, s) => (Math.abs((s.down as number) - load) < Math.abs((best.down as number) - load) ? s : best));
 }
@@ -126,7 +128,12 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
         const depth = ACTUAL[ct.topChord?.size ?? '2x4']?.[1] ?? 3.5;
         return { heel: Math.round((depth / Math.cos((slope * Math.PI) / 180)) * 1000) / 1000, slope };
       }
-      return { heel: (support && ct?.geometry?.heelByJoint[support.joint]) || 0, slope: 0 };
+      const drawn = (support && ct?.geometry?.heelByJoint[support.joint]) || 0;
+      // a truss hung from both chords at one end: its bottom chord ends square, as high as the chord
+      if (!drawn && support && ct && support.chord === 'BC' && ct.supports.some((x) => isHungEnd(x) && x.chord === 'TC')) {
+        return { heel: ACTUAL[ct.botChord?.size ?? '2x4']?.[1] ?? 3.5, slope: 0 };
+      }
+      return { heel: drawn, slope: 0 };
     };
 
     // one hanger line per hanger load; the carried truss comes from the layout
