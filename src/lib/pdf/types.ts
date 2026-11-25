@@ -70,6 +70,8 @@ export interface TrussGeometry {
   heelByJoint: Record<string, number>;
   /** pitch (degrees) of the top chord at a hung joint that lies on the top chord */
   slopeByJoint?: Record<string, number>;
+  /** height (inches) of a top chord end cut twice (a flat piece above the end vertical), measured on the drawing */
+  cutHeelByJoint?: Record<string, number>;
   /** page position of the left bearing (x) and the underside of the bottom chord (y), in points */
   originX?: number;
   baseY?: number;

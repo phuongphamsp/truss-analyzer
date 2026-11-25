@@ -293,6 +293,32 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
     if (rise !== null) slopeByJoint[s.joint] = (Math.atan(rise / 12) * 180) / Math.PI;
   }
 
+  // --- top chord end cut twice: a flat piece on top of the end vertical (tester: measured, not computed) ---
+  // The end vertical sits in the bearing box of the hung end; one end of it meets the sloped chord edge, the other a short flat.
+  const cutHeelByJoint: Record<string, number> = {};
+  const topHung = truss.supports.filter((x) => (isHungEnd(x) || isUpliftHungEnd(x)) && x.chord === 'TC');
+  if (topHung.length === 1) {
+    const len = (s: Segment) => segmentLength(s);
+    const at = (s: Segment, x: number, y: number) => Math.hypot(s.x1 - x, s.y1 - y) < 0.5 || Math.hypot(s.x2 - x, s.y2 - y) < 0.5;
+    const sloped = page.segments.filter((s) => len(s) > 40 && Math.abs(s.x2 - s.x1) > 3 && Math.abs(s.y2 - s.y1) > 3);
+    const flats = page.segments.filter((s) => len(s) < 40 && Math.abs(s.y2 - s.y1) < 0.2 && len(s) > 1);
+    const tall = page.segments.filter((s) => Math.abs(s.x1 - s.x2) < OPEN && len(s) * scale > 4.5 && len(s) * scale < 9);
+    const ends = page.segments.filter((s) => Math.abs(s.x1 - s.x2) < OPEN && len(s) * scale > 2 && len(s) * scale < 12);
+    const found: number[] = [];
+    for (const v of ends) {
+      const [a, b] = [{ x: v.x1, y: v.y1 }, { x: v.x2, y: v.y2 }];
+      const onSlope = [a, b].map((e) => sloped.some((s) => at(s, e.x, e.y)));
+      const onFlat = [a, b].map((e) => flats.some((s) => at(s, e.x, e.y)));
+      const cut = (onSlope[0] && !onSlope[1] && onFlat[1]) || (onSlope[1] && !onSlope[0] && onFlat[0]);
+      if (!cut) continue;
+      const lo = Math.min(v.y1, v.y2), hi = Math.max(v.y1, v.y2);
+      // inside a bearing box: a vertical edge of the box one pitch of the box width away, as tall as the box
+      const inBox = tall.some((e) => Math.abs(e.x1 - v.x1) < 0.3 && Math.min(e.y1, e.y2) <= lo + 0.5 && Math.max(e.y1, e.y2) >= hi - 0.5 && len(e) > len(v) + 1);
+      if (inBox) found.push(len(v) * scale);
+    }
+    if (found.length === 1) cutHeelByJoint[topHung[0].joint] = snapToDimension(page, found[0]);
+  }
+
   // --- vertical webs: two vertical faces one lumber depth apart, standing on the bottom chord ---
   const webs: VerticalWeb[] = [];
   const chord = bottomChord(page, scale, drawingFloor);
@@ -319,7 +345,7 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
       }
     }
   }
-  return { inchesPerPoint: scale, heelByJoint, slopeByJoint, webs, originX: origin ?? undefined, baseY: chord?.baseY, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
+  return { inchesPerPoint: scale, heelByJoint, slopeByJoint, cutHeelByJoint, webs, originX: origin ?? undefined, baseY: chord?.baseY, span: origin !== null && chord ? bearingSpan(page, truss, scale, origin, chord.baseY) : undefined };
 }
 
 /** Reads the drawing of every truss sheet of a job into `truss.geometry`. */

@@ -127,6 +127,9 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
       const ct = byLabel.get(carried);
       const support = ct ? hungSupport(ct, load, chord) : null;
       const slope = (support && ct?.geometry?.slopeByJoint?.[support.joint]) || 0;
+      // a top chord end cut twice cannot be computed (tester): its height is measured on the drawing
+      const cut = (support && ct?.geometry?.cutHeelByJoint?.[support.joint]) || 0;
+      if (support && cut > 0) return { heel: cut, slope };
       if (support && ct && support.chord === 'TC' && slope > 0) {
         const depth = ACTUAL[ct.topChord?.size ?? '2x4']?.[1] ?? 3.5;
         return { heel: Math.round((depth / Math.cos((slope * Math.PI) / 180)) * 1000) / 1000, slope };
