@@ -28,6 +28,9 @@ const ACTUAL: Record<string, [number, number]> = {
 /** inches: faces read from a drawing are good to about a tenth of an inch */
 const FACE_SLACK = 0.05;
 
+/** inches: top chord loads of trusses this close together are added into one load on the sheet */
+const MERGE_REACH = 3;
+
 const specString = (s: PdfLumberSpec | null) => (s ? `${s.size} ${s.grade} ${s.species}` : '');
 
 /** TRE-shaped data for a truss, reduced to what the payload builder reads. */
@@ -139,8 +142,26 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
     // one hanger line per hanger load; the carried truss comes from the layout
     const rows = g.hangerLoads
       .map((h) => ({ h, link: links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - h.position) <= 0.5) }))
-      .filter((r) => r.link)
-      .sort((a, b) => a.h.position - b.h.position);
+      .filter((r) => r.link);
+    // A truss hung from both chords at a bottom chord load also loads the top chord there. When the girder sheet has no
+    // top chord load at that position but one close by, the program added the two top chord loads and put the sum at
+    // one of the positions (tester): the truss still has its top chord connection at its own position.
+    for (const { h, link } of [...rows]) {
+      if (h.chord !== 'BC') continue;
+      const ct = byLabel.get(link!.carried);
+      const topEnd = ct?.supports.find((x) => x.chord === 'TC' && (isHungEnd(x) || isUpliftHungEnd(x)));
+      if (!ct || !topEnd) continue;
+      if (g.hangerLoads.some((x) => x.chord === 'TC' && Math.abs(x.position - h.position) <= 0.5)) continue;
+      const merged = g.hangerLoads.filter((x) => x.chord === 'TC' && Math.abs(x.position - h.position) <= MERGE_REACH).sort((p, q) => Math.abs(p.position - h.position) - Math.abs(q.position - h.position))[0];
+      if (!merged) continue;
+      // the load kept for the sum is that of another truss, and it is larger than that truss's own top chord reaction
+      const owner = links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - merged.position) <= 0.5);
+      const ownerEnd = owner ? byLabel.get(owner.carried)?.supports.filter((x) => x.chord === 'TC' && (isHungEnd(x) || isUpliftHungEnd(x))) : undefined;
+      if (!owner || owner.carried === link!.carried) continue;
+      if (ownerEnd && ownerEnd.length > 0 && merged.load <= Math.max(...ownerEnd.map((x) => x.down ?? 0))) continue;
+      rows.push({ h: { ...merged, position: h.position, load: topEnd.down ?? 0 }, link });
+    }
+    rows.sort((a, b) => a.h.position - b.h.position);
     if (rows.length === 0) continue;
 
     const hangers: NonNullable<TreData['hangers']> = rows.map(({ h, link }) => ({
