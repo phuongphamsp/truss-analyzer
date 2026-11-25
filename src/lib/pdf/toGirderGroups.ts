@@ -141,7 +141,8 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
 
     // one hanger line per hanger load; the carried truss comes from the layout
     const rows = g.hangerLoads
-      .map((h) => ({ h, link: links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - h.position) <= 0.5) }))
+      // the top chord load and the bottom chord load of one truss can sit up to an inch apart on the sheet
+      .map((h) => ({ h, link: links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - h.position) <= 0.5) ?? links.connections.find((c) => c.girder === gLabel && Math.abs(c.position - h.position) <= 1) }))
       .filter((r) => r.link);
     // A truss hung from both chords at a bottom chord load also loads the top chord there. When the girder sheet has no
     // top chord load at that position but one close by, the program added the two top chord loads and put the sum at

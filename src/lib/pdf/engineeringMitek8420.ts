@@ -32,7 +32,7 @@ const HEADER_ROW = /^(.+?)\s+(\S+)\s+(\d+)\s+(\d+)(?:\s|$)/;
 const J = '(?:[A-Z]{1,2}|\\d{1,3})';
 
 const BEARING_ROW = new RegExp(
-  `(?:^|\\s)(${J}(?:\\([A-Z]\\))?)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(MECHANICAL|[\\d-]+)(?:\\s+[\\d-]+)?`
+  `(?:^|\\s)(${J}(?:\\([A-Z]\\))?)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(MECHANICAL|HANGER BY OTHERS|[\\d-]+)(?:\\s+[\\d-]+)?`
 );
 // the location is feet-inches-sixteenths ("4-8-12") or, under a foot, inches-sixteenths ("8-12")
 const CONCENTRATED_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(\\d+-\\d+(?:-\\d+)?)\\s+(-?\\d+)\\s+(-?\\d+)`);
@@ -166,7 +166,7 @@ function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
           joint: m[1],
           down: Number(m[4]),
           uplift: Number(m[6]),
-          bearing: m[7],
+          bearing: /^HANGER/i.test(m[7]) ? 'MECHANICAL' : m[7], // some versions print "HANGER BY OTHERS" for a hung end
           upliftLoadCase: null,
         });
       }

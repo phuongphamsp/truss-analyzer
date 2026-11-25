@@ -272,8 +272,13 @@ export function readTrussGeometry(page: DrawingPage, truss: PdfTruss): TrussGeom
 
   // --- top chord pitch at a hung joint on the top chord: the nearest "4.00 12" label of the drawing ---
   const slopeByJoint: Record<string, number> = {};
+  // "4.00 12" is one text item or, on older versions, the number and a separate "12" on the same line
   const pitches = page.words
-    .map((w) => ({ w, rise: Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]) }))
+    .map((w) => {
+      const together = Number(w.str.match(/^(\d+(?:\.\d+)?)\s+12$/)?.[1]);
+      const apart = /^\d+(?:\.\d+)?$/.test(w.str) && page.words.some((o) => o.str === '12' && !o.rot && Math.abs(o.y - w.y) < 1 && o.x > w.x && o.x - (w.x + w.w) < 6);
+      return { w, rise: Number.isFinite(together) ? together : apart ? Number(w.str) : NaN };
+    })
     .filter((p) => Number.isFinite(p.rise) && !p.w.rot);
   for (const s of truss.supports.filter((x) => (isHungEnd(x) || isUpliftHungEnd(x)) && x.chord === 'TC')) {
     const joints = page.words.filter((x) => !x.rot && x.str === s.joint && x.y > drawingFloor && x.y < drawingTop);
