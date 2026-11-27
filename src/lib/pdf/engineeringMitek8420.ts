@@ -35,7 +35,8 @@ const BEARING_ROW = new RegExp(
   `(?:^|\\s)(${J}(?:\\([A-Z]\\))?)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+(MECHANICAL|HANGER BY OTHERS|[\\d-]+)(?:\\s+[\\d-]+)?`
 );
 // the location is feet-inches-sixteenths ("4-8-12") or, under a foot, inches-sixteenths ("8-12")
-const CONCENTRATED_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(\\d+-\\d+(?:-\\d+)?)\\s+(-?\\d+)\\s+(-?\\d+)`);
+// columns LC1, MAX-, MAX+: a "---" is an empty column (a girder with only an upward load has its value under MAX+)
+const CONCENTRATED_ROW = new RegExp(`(?:^|\\s)(${J})\\s+(\\d+-\\d+(?:-\\d+)?)\\s+(-?\\d+|---)\\s+(-?\\d+|---)\\s+(-?\\d+|---)`);
 const LUMBER_ROW = new RegExp(`(?:^|\\s)(${J})\\s*-\\s*(${J})\\s+(\\d)x(\\d+)\\s+DRY\\s+(.+?)\\s+(SPF|SP|DF|HF|[A-Z]{2,4})(?:\\s|$)`);
 const CHORD_PIECE = new RegExp(`(?:^|\\s)(${J})-\\s*(${J})\\s+-?\\d+\\s*\\/\\s*-?\\d+\\s+(-?[\\d.]+)\\s+-?[\\d.]+\\s+[\\d.]+\\s+\\(\\d+\\)\\s+[\\d.]+`, 'g');
 
@@ -192,7 +193,8 @@ function parsePage(lines: string[], pageNumber: number): PdfTruss | null {
       const m = lines[i].match(CONCENTRATED_ROW);
       if (!m) continue;
       const position = locationInches(m[2]);
-      if (position !== null) loads.push({ position, load: Math.abs(Number(m[3])), chord: chords.chordOf(m[1]), joint: m[1], spec: chords.specAt(m[1]) });
+      const value = [m[3], m[4], m[5]].map(Number).find((x) => Number.isFinite(x)) ?? 0;
+      if (position !== null) loads.push({ position, load: Math.abs(value), chord: chords.chordOf(m[1]), joint: m[1], spec: chords.specAt(m[1]), byLayout: m[3] === '---' && m[4] === '---' || undefined });
     }
     t.hangerLoads = loads;
   }

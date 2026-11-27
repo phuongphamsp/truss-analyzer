@@ -49,6 +49,8 @@ export interface PdfHangerLoad {
   joint: string | null;
   /** lumber of the chord piece the load sits on, when the sheet names chords by joints */
   spec?: PdfLumberSpec | null;
+  /** the sheet's table has no load value in its LC1 and MAX- columns (tester: read together with the layout): the layout's position of the carried truss is the position */
+  byLayout?: boolean;
 }
 
 /** A vertical web read from the drawing: two faces one lumber depth apart, standing on the bottom chord. */

@@ -165,6 +165,13 @@ export function pdfToGirderGroups(job: PdfJob, links: LayoutLinks): GirderGroup[
       if (ownerEnd && ownerEnd.length > 0 && merged.load <= Math.max(...ownerEnd.map((x) => x.down ?? 0))) continue;
       rows.push({ h: { ...merged, position: h.position, load: topEnd.down ?? 0 }, link });
     }
+    // a table without load values in its first columns is read with the layout (tester): the loads of one carried truss
+    // share one position, that of the load furthest along (the bottom chord load, where the truss sits)
+    for (const r of rows) {
+      if (!r.h.byLayout || !r.link) continue;
+      const mates = rows.filter((o) => o.h.byLayout && o.link === r.link);
+      r.h = { ...r.h, position: Math.max(...mates.map((o) => o.h.position)) };
+    }
     rows.sort((a, b) => a.h.position - b.h.position);
     if (rows.length === 0) continue;
 
